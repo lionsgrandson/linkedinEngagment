@@ -19,7 +19,7 @@
     box.style.cssText =
       'position:fixed;right:18px;bottom:18px;z-index:2147483647;width:250px;padding:14px;border-radius:12px;background:#111827;color:#fff;font:14px Arial;box-shadow:0 8px 30px #0006'
     box.innerHTML =
-      '<b>CodeCrafter Bot v3.2.2</b><div id="cc-status" style="margin:9px 0">Connecting to Python...</div><button id="cc-pause" style="width:100%;padding:10px;border:0;border-radius:8px;background:#f59e0b;font-weight:700;cursor:pointer">Pause bot</button>'
+      '<b>CodeCrafter Bot v3.2.4</b><div id="cc-status" style="margin:9px 0">Connecting to Python...</div><button id="cc-pause" style="width:100%;padding:10px;border:0;border-radius:8px;background:#f59e0b;font-weight:700;cursor:pointer">Pause bot</button>'
     document.documentElement.appendChild(box)
     const button = box.querySelector('#cc-pause')
     button.onmouseenter = () => (button.style.filter = 'brightness(1.12)')
@@ -434,7 +434,7 @@
       const response = await api('/cycle', 'POST', {
         posts: foundPosts,
         diagnostics: {
-          extensionVersion: '3.2.2',
+          extensionVersion: '3.2.4',
           url: location.href,
           feedHeadings: [...document.querySelectorAll('h2')].filter(
             (h) => h.textContent.trim() === 'Feed post',

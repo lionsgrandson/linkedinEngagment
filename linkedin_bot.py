@@ -25,7 +25,7 @@ from playwright.sync_api import BrowserContext, Page, TimeoutError as Playwright
 from playwright.sync_api import sync_playwright
 
 
-APP_VERSION = "3.2.2"
+APP_VERSION = "3.2.4"
 ROOT = Path(__file__).resolve().parent
 STOP_FILE = ROOT / "STOP"
 STATE_FILE = ROOT / "state.json"
@@ -43,8 +43,8 @@ class Settings:
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
     min_delay: float = 5.0
     max_delay: float = 10.0
-    max_comments_per_day: int = int(os.getenv("MAX_COMMENTS_PER_DAY", "15"))
-    max_likes_per_day: int = int(os.getenv("MAX_LIKES_PER_DAY", "15"))
+    max_comments_per_day: int = int(os.getenv("MAX_COMMENTS_PER_DAY", "100"))
+    max_likes_per_day: int = int(os.getenv("MAX_LIKES_PER_DAY", "100"))
     profile_url: str = "https://www.linkedin.com/in/moshe-schwartzberg-ab54401a7/"
     company_url: str = "http://mosheschwartzberg.com/"
     chrome_user_data_dir: Path = Path(

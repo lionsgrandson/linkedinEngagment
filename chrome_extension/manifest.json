@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CodeCrafter LinkedIn Bridge",
-  "version": "3.2.2",
+  "version": "3.2.4",
   "description": "Connects the local Ollama engagement bot to the signed-in LinkedIn tab.",
   "permissions": ["tabs", "storage"],
   "host_permissions": ["https://www.linkedin.com/*", "http://127.0.0.1:8765/*"],
