@@ -1,4 +1,5 @@
 .browser-profile/
+.chrome-profile/
 __pycache__/
 *.pyc
 .venv/

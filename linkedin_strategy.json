@@ -1,0 +1,65 @@
+{
+  "positioning": "I help B2B startups build predictable outbound and referral-driven pipeline without relying on paid ads.",
+  "offer": "30-day pipeline sprint for B2B startups",
+  "outcome": "Build a repeatable system for conversations with qualified startup buyers.",
+  "icp": {
+    "company_stage": ["seed", "series a"],
+    "headcount": "5-50",
+    "industries": [
+      "B2B SaaS",
+      "AI tools",
+      "fintech",
+      "dev tools",
+      "HR tech",
+      "cybersecurity",
+      "professional services"
+    ],
+    "roles": [
+      "Founder",
+      "CEO",
+      "Head of Sales",
+      "Head of Growth",
+      "Revenue Lead",
+      "Marketing Lead"
+    ],
+    "signals": [
+      "recent funding",
+      "hiring sales",
+      "hiring growth",
+      "launch",
+      "go-to-market",
+      "sales motion"
+    ]
+  },
+  "engagement_topics": [
+    "web development",
+    "B2B startups",
+    "personal growth",
+    "Zionism",
+    "technology",
+    "software development",
+    "artificial intelligence"
+  ],
+  "content_mix": { "tactical": 70, "founder_pov": 20, "offer_case_study": 10 },
+  "content_topics": [
+    "Most B2B startups do not have a lead problem; they have a targeting and follow-up problem.",
+    "The five fields every startup CRM needs before outbound starts.",
+    "A before-and-after breakdown of a better cold message for startup founders.",
+    "Why paid ads amplify a working message but do not repair a broken one.",
+    "How to build a referral loop with fractional CMOs, startup advisors, lawyers, accountants, VCs, accelerators, and dev shops."
+  ],
+  "message_stages": {
+    "connection": "Short personalized request based on one visible fact; no pitch.",
+    "accepted": "Friendly non-pitch opener tied to their role or recent post.",
+    "useful_followup": "One useful observation or resource; no meeting request.",
+    "diagnostic_invite": "Invite to a short diagnostic call only after clear relevance or engagement.",
+    "partner": "Explain the referral fit, clean tracking, and 20% of the first three months after client payment clears."
+  },
+  "daily_limits": {
+    "posts": 1,
+    "comments": 50,
+    "likes": 50,
+    "messages": 10,
+    "connections": 50
+  }
+}

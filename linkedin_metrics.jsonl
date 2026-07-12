@@ -1,0 +1,11 @@
+{"at": "2026-07-12T12:36:06", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-12T12:36:13", "event": "confirmed_like", "count": 5}
+{"at": "2026-07-12T12:36:31", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-12T12:36:42", "event": "confirmed_like", "count": 6}
+{"at": "2026-07-12T12:36:55", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-12T12:36:56", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-12T12:37:03", "event": "confirmed_like", "count": 7}
+{"at": "2026-07-12T12:37:19", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-12T12:37:21", "event": "post_scored", "score": 30, "relevant": false}
+{"at": "2026-07-12T12:38:30", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-12T12:38:38", "event": "confirmed_like", "count": 8}
