@@ -1,0 +1,8 @@
+.browser-profile/
+__pycache__/
+*.pyc
+.venv/
+linkedin_bot.log
+state.json
+STOP
+.env
