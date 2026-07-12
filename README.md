@@ -70,6 +70,8 @@ your already-open, normally signed-in Chrome without copying its profile.
 
 After updating extension files, click the extension's reload icon and then refresh the LinkedIn
 tab. Chrome does not replace an already-injected content script until its page is refreshed.
+To make Chrome treat your updated extension as a new version, increase the `version` value in
+`chrome_extension/manifest.json` before reloading the extension.
 
 ```powershell
 python linkedin_bot.py

@@ -25,13 +25,14 @@ from playwright.sync_api import BrowserContext, Page, TimeoutError as Playwright
 from playwright.sync_api import sync_playwright
 
 
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.2.2"
 ROOT = Path(__file__).resolve().parent
 STOP_FILE = ROOT / "STOP"
 STATE_FILE = ROOT / "state.json"
 LOG_FILE = ROOT / "linkedin_bot.log"
 STRATEGY_FILE = ROOT / "linkedin_strategy.json"
 METRICS_FILE = ROOT / "linkedin_metrics.jsonl"
+SKIPPED_POST_TOPICS_FILE = ROOT / "skipped_post_topics.txt"
 DEFAULT_CHROME_DATA = Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data"
 AUTOMATION_CHROME_DATA = ROOT / ".chrome-profile"
 
@@ -207,6 +208,28 @@ def record_metric(event: str, **details: Any) -> None:
     entry = {"at": datetime.now().isoformat(timespec="seconds"), "event": event, **details}
     with METRICS_FILE.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def record_skipped_post(post_text: str, analysis: dict[str, Any]) -> None:
+    if not SKIPPED_POST_TOPICS_FILE.exists():
+        SKIPPED_POST_TOPICS_FILE.write_text("Skipped post topics\n==================\n", encoding="utf-8")
+
+    text = " ".join(post_text.split())
+    matched_topics = [
+        topic for topic in STRATEGY.get("engagement_topics", [])
+        if topic.lower() in text.lower()
+    ]
+    if not matched_topics:
+        matched_topics = ["no matching engagement topics"]
+
+    excerpt = text[:180]
+    entry = (
+        f"{datetime.now().isoformat(timespec='seconds')} | "
+        f"reason={analysis.get('reason', 'unknown')} | "
+        f"topics={', '.join(matched_topics)} | excerpt={excerpt}\n"
+    )
+    with SKIPPED_POST_TOPICS_FILE.open("a", encoding="utf-8") as stream:
+        stream.write(entry)
 
 
 def prepare_automation_profile() -> Path:
@@ -478,6 +501,8 @@ def analyze_feed(page: Page, state: dict[str, Any]) -> None:
                 print(f"\nRelevant post ({analysis.get('score')}/100):\n{text[:900]}")
                 maybe_like(page, post, state)
                 maybe_comment(page, post, text, state)
+            else:
+                record_skipped_post(text, analysis)
             if interruptible_delay("scroll", page):
                 post.scroll_into_view_if_needed()
         except PlaywrightTimeoutError:
