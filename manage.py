@@ -113,13 +113,15 @@ def reset_today() -> None:
     state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     pending = state.get("pending_connections", [])
     replied = state.get("replied_notification_ids", [])
+    instagram_story_progress = state.get("instagram_likes_since_stories", 0)
     state = {
         "day": date.today().isoformat(),
         "comments": 0, "likes": 0, "messages": 0, "connections": 0,
         "pending_connections": pending,
         "notification_replies": 0, "replied_notification_ids": replied,
         "last_followup_day": "",
-        "instagram_comments": 0, "instagram_likes": 0,
+        "instagram_likes": 0, "instagram_story_views": 0,
+        "instagram_likes_since_stories": instagram_story_progress,
     }
     path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     print(f"Reset today's interaction counters for {state['day']}; pending connections preserved.")

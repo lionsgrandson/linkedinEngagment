@@ -112,12 +112,16 @@ class MaintenanceTests(unittest.TestCase):
                 "day": "2000-01-01", "likes": 99,
                 "pending_connections": [{"url": "https://example.test/profile"}],
                 "replied_notification_ids": ["notification-1"],
+                "instagram_likes_since_stories": 73,
             }), encoding="utf-8")
             with patch.object(manage, "ROOT", root):
                 manage.reset_today()
             state = json.loads((root / "state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["likes"], 0)
             self.assertEqual(state["instagram_likes"], 0)
+            self.assertEqual(state["instagram_story_views"], 0)
+            self.assertEqual(state["instagram_likes_since_stories"], 73)
+            self.assertNotIn("instagram_comments", state)
             self.assertNotIn("instagram_messages", state)
             self.assertNotIn("instagram_follows", state)
             self.assertEqual(len(state["pending_connections"]), 1)
@@ -137,21 +141,43 @@ class MaintenanceTests(unittest.TestCase):
             self.assertIn("detected_topics=sustainable architecture", content)
             self.assertIn("score=31", content)
 
-    def test_instagram_model_rejection_still_allows_non_comment_engagement(self):
-        with patch.object(linkedin_bot, "ocr_screenshot", return_value="garbled OCR watermark"), \
-                patch.object(linkedin_bot, "ollama", return_value=json.dumps({
-                    "allowed": False, "reason": "OCR artifacts", "comment": "",
-                })):
-            result = linkedin_bot.instagram_interaction("A real visible caption", "data:image/png,x")
-        self.assertTrue(result["allowed"])
-        self.assertTrue(result["comment"])
-        self.assertIn("neutral comment", result["reason"])
+    def test_instagram_only_likes_and_views_stories(self):
+        instagram = Path("chrome_extension/instagram_content.js").read_text(encoding="utf-8")
+        worker = Path("chrome_extension/service_worker.js").read_text(encoding="utf-8")
+        server = Path("extension_server.py").read_text(encoding="utf-8")
+        manifest = json.loads(Path("chrome_extension/manifest.json").read_text(encoding="utf-8"))
+        strategy = json.loads(Path("linkedin_strategy.json").read_text(encoding="utf-8"))
+        dependencies = (Path("requirements.txt").read_text(encoding="utf-8") +
+                        Path("pyproject.toml").read_text(encoding="utf-8")).lower()
+        self.assertIn("startStoryBatch", instagram)
+        self.assertIn("viewStory", instagram)
+        self.assertIn("instagram_story_view", instagram)
+        self.assertIn("instagram-story-batch-complete", instagram)
+        self.assertIn("/instagram-status", instagram)
+        self.assertIn("shouldWatchStories", server)
+        self.assertIn("instagram_likes_since_stories", server)
+        self.assertNotIn("canLike", server)
+        self.assertNotIn("canViewStory", server)
+        for removed in ("capturevisible", "addcomment", "instagram_comment", "ocr", "follow"):
+            self.assertNotIn(removed, (instagram + worker).lower())
+        for removed in ("instagram-decide", "instagram_comment", "instagram_ocr"):
+            self.assertNotIn(removed, server.lower())
+        self.assertNotIn("activeTab", manifest.get("permissions", []))
+        self.assertEqual(strategy["instagram"]["story_interval_likes"], 100)
+        self.assertNotIn("daily_limits", strategy["instagram"])
+        self.assertNotIn("pytesseract", dependencies)
+        self.assertNotIn("pillow", dependencies)
 
-    def test_instagram_empty_content_still_allows_non_comment_engagement(self):
-        with patch.object(linkedin_bot, "ocr_screenshot", return_value=""):
-            result = linkedin_bot.instagram_interaction("", "data:image/png,x")
-        self.assertTrue(result["allowed"])
-        self.assertTrue(result["comment"])
+    def test_instagram_story_cycle_survives_day_rollover(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = Path(directory) / "state.json"
+            state_file.write_text(json.dumps({
+                "day": "2000-01-01",
+                "instagram_likes_since_stories": 99,
+            }), encoding="utf-8")
+            with patch.object(linkedin_bot, "STATE_FILE", state_file):
+                state = linkedin_bot.load_state()
+            self.assertEqual(state["instagram_likes_since_stories"], 99)
 
     def test_bridge_health_cycle_and_extension_status(self):
         with socket.socket() as reservation:

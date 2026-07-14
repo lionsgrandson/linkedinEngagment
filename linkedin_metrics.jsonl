@@ -1068,3 +1068,448 @@
 {"at": "2026-07-13T19:07:19", "event": "message_drafted", "stage": "accepted", "allowed": false}
 {"at": "2026-07-13T19:23:28", "event": "message_drafted", "stage": "accepted", "allowed": false}
 {"at": "2026-07-13T19:37:13", "event": "post_scored", "score": 45, "relevant": true}
+{"at": "2026-07-14T16:44:26", "event": "confirmed_instagram_like", "count": 1}
+{"at": "2026-07-14T16:44:32", "event": "post_scored", "score": 92, "relevant": true}
+{"at": "2026-07-14T16:44:32", "event": "confirmed_instagram_like", "count": 2}
+{"at": "2026-07-14T16:44:45", "event": "confirmed_like", "count": 1}
+{"at": "2026-07-14T16:44:50", "event": "confirmed_instagram_like", "count": 3}
+{"at": "2026-07-14T16:44:56", "event": "confirmed_instagram_like", "count": 4}
+{"at": "2026-07-14T16:45:02", "event": "confirmed_instagram_like", "count": 5}
+{"at": "2026-07-14T16:45:05", "event": "confirmed_comment", "count": 1}
+{"at": "2026-07-14T16:45:08", "event": "confirmed_instagram_like", "count": 6}
+{"at": "2026-07-14T16:45:14", "event": "confirmed_instagram_like", "count": 7}
+{"at": "2026-07-14T16:45:20", "event": "confirmed_instagram_like", "count": 8}
+{"at": "2026-07-14T16:45:21", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T16:45:26", "event": "confirmed_instagram_like", "count": 9}
+{"at": "2026-07-14T16:45:32", "event": "confirmed_instagram_like", "count": 10}
+{"at": "2026-07-14T16:45:33", "event": "confirmed_like", "count": 2}
+{"at": "2026-07-14T16:45:38", "event": "confirmed_instagram_like", "count": 11}
+{"at": "2026-07-14T16:45:44", "event": "confirmed_instagram_like", "count": 12}
+{"at": "2026-07-14T16:45:50", "event": "confirmed_instagram_like", "count": 13}
+{"at": "2026-07-14T16:45:56", "event": "confirmed_instagram_like", "count": 14}
+{"at": "2026-07-14T16:45:56", "event": "confirmed_comment", "count": 2}
+{"at": "2026-07-14T16:46:02", "event": "confirmed_instagram_like", "count": 15}
+{"at": "2026-07-14T16:46:08", "event": "confirmed_instagram_like", "count": 16}
+{"at": "2026-07-14T16:46:14", "event": "confirmed_instagram_like", "count": 17}
+{"at": "2026-07-14T16:46:20", "event": "confirmed_instagram_like", "count": 18}
+{"at": "2026-07-14T16:46:26", "event": "confirmed_instagram_like", "count": 19}
+{"at": "2026-07-14T16:46:38", "event": "confirmed_instagram_like", "count": 20}
+{"at": "2026-07-14T16:46:58", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/basiakubicka/"}
+{"at": "2026-07-14T16:52:24", "event": "post_scored", "score": 10, "relevant": false}
+{"at": "2026-07-14T16:52:51", "event": "post_scored", "score": 15, "relevant": false}
+{"at": "2026-07-14T16:53:17", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T16:54:14", "event": "confirmed_like", "count": 3}
+{"at": "2026-07-14T16:54:33", "event": "confirmed_comment", "count": 3}
+{"at": "2026-07-14T16:55:07", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T16:56:08", "event": "confirmed_like", "count": 4}
+{"at": "2026-07-14T16:56:28", "event": "confirmed_comment", "count": 4}
+{"at": "2026-07-14T16:56:53", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T16:59:29", "event": "confirmed_instagram_like", "count": 21}
+{"at": "2026-07-14T16:59:40", "event": "confirmed_instagram_like", "count": 22}
+{"at": "2026-07-14T16:59:52", "event": "confirmed_instagram_like", "count": 23}
+{"at": "2026-07-14T16:59:58", "event": "confirmed_instagram_like", "count": 24}
+{"at": "2026-07-14T16:59:59", "event": "post_scored", "score": 45, "relevant": true}
+{"at": "2026-07-14T17:00:04", "event": "confirmed_instagram_like", "count": 25}
+{"at": "2026-07-14T17:00:32", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T17:00:37", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T17:00:42", "event": "post_scored", "score": 15, "relevant": false}
+{"at": "2026-07-14T17:00:48", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T17:00:59", "event": "confirmed_like", "count": 5}
+{"at": "2026-07-14T17:01:20", "event": "confirmed_comment", "count": 5}
+{"at": "2026-07-14T17:01:44", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/alonmoradov/"}
+{"at": "2026-07-14T17:02:09", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T17:03:07", "event": "confirmed_like", "count": 6}
+{"at": "2026-07-14T17:04:05", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T17:04:07", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/doravanourek/"}
+{"at": "2026-07-14T17:04:39", "event": "confirmed_like", "count": 7}
+{"at": "2026-07-14T17:05:02", "event": "confirmed_comment", "count": 6}
+{"at": "2026-07-14T17:05:30", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T17:05:40", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/doravanourek/"}
+{"at": "2026-07-14T17:05:52", "event": "confirmed_like", "count": 8}
+{"at": "2026-07-14T17:06:11", "event": "confirmed_comment", "count": 7}
+{"at": "2026-07-14T17:06:21", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/doravanourek/"}
+{"at": "2026-07-14T17:06:52", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T17:08:00", "event": "confirmed_like", "count": 9}
+{"at": "2026-07-14T17:08:40", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T17:09:43", "event": "confirmed_like", "count": 10}
+{"at": "2026-07-14T17:10:08", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/alexander-gorelik-b8361240/"}
+{"at": "2026-07-14T17:10:34", "event": "confirmed_instagram_like", "count": 26}
+{"at": "2026-07-14T17:10:40", "event": "confirmed_instagram_like", "count": 27}
+{"at": "2026-07-14T17:10:46", "event": "confirmed_instagram_like", "count": 28}
+{"at": "2026-07-14T17:10:58", "event": "confirmed_instagram_like", "count": 29}
+{"at": "2026-07-14T17:11:04", "event": "confirmed_instagram_like", "count": 30}
+{"at": "2026-07-14T17:11:10", "event": "confirmed_instagram_like", "count": 31}
+{"at": "2026-07-14T17:11:16", "event": "confirmed_instagram_like", "count": 32}
+{"at": "2026-07-14T17:11:22", "event": "confirmed_instagram_like", "count": 33}
+{"at": "2026-07-14T17:11:34", "event": "confirmed_instagram_like", "count": 34}
+{"at": "2026-07-14T17:11:40", "event": "confirmed_instagram_like", "count": 35}
+{"at": "2026-07-14T17:11:46", "event": "confirmed_instagram_like", "count": 36}
+{"at": "2026-07-14T17:11:52", "event": "confirmed_instagram_like", "count": 37}
+{"at": "2026-07-14T17:11:58", "event": "confirmed_instagram_like", "count": 38}
+{"at": "2026-07-14T17:12:04", "event": "confirmed_instagram_like", "count": 39}
+{"at": "2026-07-14T17:12:16", "event": "confirmed_instagram_like", "count": 40}
+{"at": "2026-07-14T17:12:22", "event": "confirmed_instagram_like", "count": 41}
+{"at": "2026-07-14T17:12:34", "event": "confirmed_instagram_like", "count": 42}
+{"at": "2026-07-14T17:12:40", "event": "confirmed_instagram_like", "count": 43}
+{"at": "2026-07-14T17:12:46", "event": "confirmed_instagram_like", "count": 44}
+{"at": "2026-07-14T17:12:52", "event": "confirmed_instagram_like", "count": 45}
+{"at": "2026-07-14T17:12:58", "event": "confirmed_instagram_like", "count": 46}
+{"at": "2026-07-14T17:13:04", "event": "confirmed_instagram_like", "count": 47}
+{"at": "2026-07-14T17:15:20", "event": "confirmed_instagram_like", "count": 48}
+{"at": "2026-07-14T17:15:26", "event": "confirmed_instagram_like", "count": 49}
+{"at": "2026-07-14T17:15:33", "event": "confirmed_instagram_like", "count": 50}
+{"at": "2026-07-14T17:19:15", "event": "confirmed_instagram_like", "count": 51}
+{"at": "2026-07-14T17:26:08", "event": "confirmed_instagram_like", "count": 52}
+{"at": "2026-07-14T17:26:20", "event": "confirmed_instagram_like", "count": 53}
+{"at": "2026-07-14T17:26:32", "event": "confirmed_instagram_like", "count": 54}
+{"at": "2026-07-14T17:26:38", "event": "confirmed_instagram_like", "count": 55}
+{"at": "2026-07-14T17:26:44", "event": "confirmed_instagram_like", "count": 56}
+{"at": "2026-07-14T17:26:50", "event": "confirmed_instagram_like", "count": 57}
+{"at": "2026-07-14T17:26:56", "event": "confirmed_instagram_like", "count": 58}
+{"at": "2026-07-14T17:27:02", "event": "confirmed_instagram_like", "count": 59}
+{"at": "2026-07-14T17:27:08", "event": "confirmed_instagram_like", "count": 60}
+{"at": "2026-07-14T17:27:14", "event": "confirmed_instagram_like", "count": 61}
+{"at": "2026-07-14T17:27:20", "event": "confirmed_instagram_like", "count": 62}
+{"at": "2026-07-14T17:27:26", "event": "confirmed_instagram_like", "count": 63}
+{"at": "2026-07-14T17:27:39", "event": "confirmed_instagram_like", "count": 64}
+{"at": "2026-07-14T17:33:56", "event": "confirmed_instagram_like", "count": 65}
+{"at": "2026-07-14T17:34:02", "event": "confirmed_instagram_like", "count": 66}
+{"at": "2026-07-14T17:34:08", "event": "confirmed_instagram_like", "count": 67}
+{"at": "2026-07-14T17:34:20", "event": "confirmed_instagram_like", "count": 68}
+{"at": "2026-07-14T17:34:26", "event": "confirmed_instagram_like", "count": 69}
+{"at": "2026-07-14T17:34:32", "event": "confirmed_instagram_like", "count": 70}
+{"at": "2026-07-14T17:34:38", "event": "confirmed_instagram_like", "count": 71}
+{"at": "2026-07-14T17:34:45", "event": "confirmed_instagram_like", "count": 72}
+{"at": "2026-07-14T17:35:08", "event": "confirmed_instagram_like", "count": 73}
+{"at": "2026-07-14T17:35:20", "event": "confirmed_instagram_like", "count": 74}
+{"at": "2026-07-14T17:35:26", "event": "confirmed_instagram_like", "count": 75}
+{"at": "2026-07-14T17:50:50", "event": "confirmed_instagram_like", "count": 76}
+{"at": "2026-07-14T17:50:56", "event": "confirmed_instagram_like", "count": 77}
+{"at": "2026-07-14T17:51:08", "event": "confirmed_instagram_like", "count": 78}
+{"at": "2026-07-14T17:51:14", "event": "confirmed_instagram_like", "count": 79}
+{"at": "2026-07-14T17:51:20", "event": "confirmed_instagram_like", "count": 80}
+{"at": "2026-07-14T17:51:26", "event": "confirmed_instagram_like", "count": 81}
+{"at": "2026-07-14T17:51:38", "event": "confirmed_instagram_like", "count": 82}
+{"at": "2026-07-14T17:51:44", "event": "confirmed_instagram_like", "count": 83}
+{"at": "2026-07-14T17:51:56", "event": "confirmed_instagram_like", "count": 84}
+{"at": "2026-07-14T17:52:02", "event": "confirmed_instagram_like", "count": 85}
+{"at": "2026-07-14T17:52:08", "event": "confirmed_instagram_like", "count": 86}
+{"at": "2026-07-14T17:52:14", "event": "confirmed_instagram_like", "count": 87}
+{"at": "2026-07-14T17:52:20", "event": "confirmed_instagram_like", "count": 88}
+{"at": "2026-07-14T17:52:26", "event": "confirmed_instagram_like", "count": 89}
+{"at": "2026-07-14T17:52:38", "event": "confirmed_instagram_like", "count": 90}
+{"at": "2026-07-14T17:52:44", "event": "confirmed_instagram_like", "count": 91}
+{"at": "2026-07-14T17:52:50", "event": "confirmed_instagram_like", "count": 92}
+{"at": "2026-07-14T17:52:56", "event": "confirmed_instagram_like", "count": 93}
+{"at": "2026-07-14T17:53:02", "event": "confirmed_instagram_like", "count": 94}
+{"at": "2026-07-14T17:53:08", "event": "confirmed_instagram_like", "count": 95}
+{"at": "2026-07-14T17:53:14", "event": "confirmed_instagram_like", "count": 96}
+{"at": "2026-07-14T17:53:20", "event": "confirmed_instagram_like", "count": 97}
+{"at": "2026-07-14T17:53:26", "event": "confirmed_instagram_like", "count": 98}
+{"at": "2026-07-14T17:53:32", "event": "confirmed_instagram_like", "count": 99}
+{"at": "2026-07-14T17:53:38", "event": "confirmed_instagram_like", "count": 100}
+{"at": "2026-07-14T17:53:44", "event": "confirmed_instagram_like", "count": 101}
+{"at": "2026-07-14T17:53:56", "event": "confirmed_instagram_like", "count": 102}
+{"at": "2026-07-14T17:54:02", "event": "confirmed_instagram_like", "count": 103}
+{"at": "2026-07-14T17:54:08", "event": "confirmed_instagram_like", "count": 104}
+{"at": "2026-07-14T17:54:14", "event": "confirmed_instagram_like", "count": 105}
+{"at": "2026-07-14T17:54:20", "event": "confirmed_instagram_like", "count": 106}
+{"at": "2026-07-14T17:54:26", "event": "confirmed_instagram_like", "count": 107}
+{"at": "2026-07-14T17:54:32", "event": "confirmed_instagram_like", "count": 108}
+{"at": "2026-07-14T17:54:38", "event": "confirmed_instagram_like", "count": 109}
+{"at": "2026-07-14T17:54:44", "event": "confirmed_instagram_like", "count": 110}
+{"at": "2026-07-14T17:54:50", "event": "confirmed_instagram_like", "count": 111}
+{"at": "2026-07-14T17:54:56", "event": "confirmed_instagram_like", "count": 112}
+{"at": "2026-07-14T17:55:14", "event": "confirmed_instagram_like", "count": 113}
+{"at": "2026-07-14T17:55:20", "event": "confirmed_instagram_like", "count": 114}
+{"at": "2026-07-14T17:55:26", "event": "confirmed_instagram_like", "count": 115}
+{"at": "2026-07-14T17:55:34", "event": "confirmed_instagram_like", "count": 116}
+{"at": "2026-07-14T17:57:26", "event": "confirmed_instagram_like", "count": 117}
+{"at": "2026-07-14T17:57:32", "event": "confirmed_instagram_like", "count": 118}
+{"at": "2026-07-14T17:57:38", "event": "confirmed_instagram_like", "count": 119}
+{"at": "2026-07-14T17:57:44", "event": "confirmed_instagram_like", "count": 120}
+{"at": "2026-07-14T17:57:50", "event": "instagram_story_batch_complete", "likes": 100, "story_views": 0}
+{"at": "2026-07-14T17:58:18", "event": "confirmed_instagram_story_view", "count": 1}
+{"at": "2026-07-14T17:58:24", "event": "confirmed_instagram_story_view", "count": 2}
+{"at": "2026-07-14T17:58:30", "event": "confirmed_instagram_story_view", "count": 3}
+{"at": "2026-07-14T17:58:36", "event": "confirmed_instagram_story_view", "count": 4}
+{"at": "2026-07-14T17:58:42", "event": "confirmed_instagram_story_view", "count": 5}
+{"at": "2026-07-14T17:58:48", "event": "confirmed_instagram_story_view", "count": 6}
+{"at": "2026-07-14T17:58:54", "event": "confirmed_instagram_story_view", "count": 7}
+{"at": "2026-07-14T17:59:00", "event": "confirmed_instagram_story_view", "count": 8}
+{"at": "2026-07-14T17:59:07", "event": "confirmed_instagram_story_view", "count": 9}
+{"at": "2026-07-14T17:59:12", "event": "confirmed_instagram_story_view", "count": 10}
+{"at": "2026-07-14T17:59:18", "event": "confirmed_instagram_story_view", "count": 11}
+{"at": "2026-07-14T17:59:25", "event": "confirmed_instagram_story_view", "count": 12}
+{"at": "2026-07-14T17:59:30", "event": "confirmed_instagram_story_view", "count": 13}
+{"at": "2026-07-14T17:59:37", "event": "confirmed_instagram_story_view", "count": 14}
+{"at": "2026-07-14T17:59:42", "event": "confirmed_instagram_story_view", "count": 15}
+{"at": "2026-07-14T17:59:49", "event": "confirmed_instagram_story_view", "count": 16}
+{"at": "2026-07-14T17:59:55", "event": "confirmed_instagram_story_view", "count": 17}
+{"at": "2026-07-14T18:00:50", "event": "confirmed_instagram_story_view", "count": 18}
+{"at": "2026-07-14T18:02:50", "event": "confirmed_instagram_story_view", "count": 19}
+{"at": "2026-07-14T18:04:50", "event": "confirmed_instagram_story_view", "count": 20}
+{"at": "2026-07-14T18:06:26", "event": "confirmed_instagram_story_view", "count": 21}
+{"at": "2026-07-14T18:06:36", "event": "confirmed_instagram_story_view", "count": 22}
+{"at": "2026-07-14T18:06:42", "event": "confirmed_instagram_story_view", "count": 23}
+{"at": "2026-07-14T18:06:48", "event": "confirmed_instagram_story_view", "count": 24}
+{"at": "2026-07-14T18:06:54", "event": "confirmed_instagram_story_view", "count": 25}
+{"at": "2026-07-14T18:07:00", "event": "confirmed_instagram_story_view", "count": 26}
+{"at": "2026-07-14T18:07:06", "event": "confirmed_instagram_story_view", "count": 27}
+{"at": "2026-07-14T18:07:12", "event": "confirmed_instagram_story_view", "count": 28}
+{"at": "2026-07-14T18:07:18", "event": "confirmed_instagram_story_view", "count": 29}
+{"at": "2026-07-14T18:07:24", "event": "confirmed_instagram_story_view", "count": 30}
+{"at": "2026-07-14T18:07:30", "event": "confirmed_instagram_story_view", "count": 31}
+{"at": "2026-07-14T18:07:36", "event": "confirmed_instagram_story_view", "count": 32}
+{"at": "2026-07-14T18:07:42", "event": "confirmed_instagram_story_view", "count": 33}
+{"at": "2026-07-14T18:07:48", "event": "confirmed_instagram_story_view", "count": 34}
+{"at": "2026-07-14T18:07:54", "event": "confirmed_instagram_story_view", "count": 35}
+{"at": "2026-07-14T18:08:00", "event": "confirmed_instagram_story_view", "count": 36}
+{"at": "2026-07-14T18:08:24", "event": "confirmed_instagram_story_view", "count": 37}
+{"at": "2026-07-14T18:08:30", "event": "confirmed_instagram_story_view", "count": 38}
+{"at": "2026-07-14T18:08:36", "event": "confirmed_instagram_story_view", "count": 39}
+{"at": "2026-07-14T18:08:42", "event": "confirmed_instagram_story_view", "count": 40}
+{"at": "2026-07-14T18:09:18", "event": "confirmed_instagram_story_view", "count": 41}
+{"at": "2026-07-14T18:09:24", "event": "confirmed_instagram_story_view", "count": 42}
+{"at": "2026-07-14T18:09:30", "event": "confirmed_instagram_story_view", "count": 43}
+{"at": "2026-07-14T18:09:36", "event": "confirmed_instagram_story_view", "count": 44}
+{"at": "2026-07-14T18:10:08", "event": "confirmed_instagram_like", "count": 121}
+{"at": "2026-07-14T18:27:48", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T18:28:00", "event": "confirmed_like", "count": 11}
+{"at": "2026-07-14T18:28:20", "event": "confirmed_comment", "count": 8}
+{"at": "2026-07-14T18:28:39", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/harrison-walke-08649b422/"}
+{"at": "2026-07-14T18:28:42", "event": "post_scored", "score": 15, "relevant": false}
+{"at": "2026-07-14T18:28:45", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T18:29:01", "event": "confirmed_like", "count": 12}
+{"at": "2026-07-14T18:29:18", "event": "confirmed_comment", "count": 9}
+{"at": "2026-07-14T18:29:36", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T18:30:26", "event": "confirmed_like", "count": 13}
+{"at": "2026-07-14T18:30:45", "event": "confirmed_comment", "count": 10}
+{"at": "2026-07-14T18:31:13", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/ben-pines/"}
+{"at": "2026-07-14T18:31:34", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T18:32:23", "event": "confirmed_like", "count": 14}
+{"at": "2026-07-14T18:32:52", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T18:32:55", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/codiesanchez/"}
+{"at": "2026-07-14T18:33:24", "event": "confirmed_like", "count": 15}
+{"at": "2026-07-14T18:33:50", "event": "post_scored", "score": 15, "relevant": false}
+{"at": "2026-07-14T18:34:11", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T18:35:18", "event": "confirmed_comment", "count": 11}
+{"at": "2026-07-14T18:35:39", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T18:36:29", "event": "confirmed_like", "count": 16}
+{"at": "2026-07-14T18:37:01", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T18:37:10", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/bobevansit/"}
+{"at": "2026-07-14T18:37:21", "event": "confirmed_like", "count": 17}
+{"at": "2026-07-14T18:37:40", "event": "confirmed_comment", "count": 12}
+{"at": "2026-07-14T18:38:08", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/bobevansit/"}
+{"at": "2026-07-14T18:39:09", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/bobevansit/"}
+{"at": "2026-07-14T18:39:46", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/assaf-buskila-11ab7a347/"}
+{"at": "2026-07-14T20:03:11", "event": "post_scored", "score": 10, "relevant": false}
+{"at": "2026-07-14T20:04:12", "event": "post_scored", "score": 15, "relevant": false}
+{"at": "2026-07-14T20:04:14", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:04:25", "event": "confirmed_like", "count": 18}
+{"at": "2026-07-14T20:04:44", "event": "confirmed_comment", "count": 13}
+{"at": "2026-07-14T20:05:57", "event": "post_scored", "score": 78, "relevant": true}
+{"at": "2026-07-14T20:07:08", "event": "confirmed_like", "count": 19}
+{"at": "2026-07-14T20:07:21", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/justinwelsh/"}
+{"at": "2026-07-14T20:07:27", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:07:40", "event": "confirmed_like", "count": 20}
+{"at": "2026-07-14T20:07:52", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:07:55", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:08:28", "event": "confirmed_comment", "count": 14}
+{"at": "2026-07-14T20:08:39", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:08:41", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:08:44", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:08:56", "event": "confirmed_like", "count": 21}
+{"at": "2026-07-14T20:09:17", "event": "confirmed_comment", "count": 15}
+{"at": "2026-07-14T20:09:30", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/shirasimmonds-12e5e6f3h/"}
+{"at": "2026-07-14T20:09:39", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:09:52", "event": "confirmed_like", "count": 22}
+{"at": "2026-07-14T20:10:07", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/christian-chenard-lemire-2149aa20/?locale=en"}
+{"at": "2026-07-14T20:10:09", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:10:20", "event": "confirmed_like", "count": 23}
+{"at": "2026-07-14T20:10:41", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/davidkline/"}
+{"at": "2026-07-14T20:10:43", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:10:54", "event": "confirmed_like", "count": 24}
+{"at": "2026-07-14T20:11:11", "event": "confirmed_comment", "count": 16}
+{"at": "2026-07-14T20:11:12", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/davidkline/"}
+{"at": "2026-07-14T20:11:29", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/yanivnizan/"}
+{"at": "2026-07-14T20:11:31", "event": "post_scored", "score": 95, "relevant": true}
+{"at": "2026-07-14T20:11:42", "event": "confirmed_like", "count": 25}
+{"at": "2026-07-14T20:11:52", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:12:05", "event": "confirmed_like", "count": 26}
+{"at": "2026-07-14T20:12:25", "event": "confirmed_comment", "count": 17}
+{"at": "2026-07-14T20:12:40", "event": "post_scored", "score": 95, "relevant": true}
+{"at": "2026-07-14T20:12:52", "event": "confirmed_like", "count": 27}
+{"at": "2026-07-14T20:13:09", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/daniel-alper-17020997/"}
+{"at": "2026-07-14T20:13:16", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:13:27", "event": "confirmed_like", "count": 28}
+{"at": "2026-07-14T20:13:47", "event": "confirmed_comment", "count": 18}
+{"at": "2026-07-14T20:14:03", "event": "post_scored", "score": 45, "relevant": true}
+{"at": "2026-07-14T20:14:05", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/evanchi/"}
+{"at": "2026-07-14T20:14:08", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:14:20", "event": "confirmed_like", "count": 29}
+{"at": "2026-07-14T20:14:42", "event": "confirmed_comment", "count": 19}
+{"at": "2026-07-14T20:14:59", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/%D7%99%D7%A6%D7%97%D7%A7-%D7%90%D7%91%D7%99%D7%97%D7%99-%D7%97%D7%9C%D7%91%D7%99-3843a63a4/"}
+{"at": "2026-07-14T20:15:03", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:15:16", "event": "confirmed_like", "count": 30}
+{"at": "2026-07-14T20:15:33", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/fraydaleibtag/"}
+{"at": "2026-07-14T20:15:40", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:15:53", "event": "confirmed_like", "count": 31}
+{"at": "2026-07-14T20:16:11", "event": "confirmed_comment", "count": 20}
+{"at": "2026-07-14T20:16:28", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/alekai/"}
+{"at": "2026-07-14T20:16:30", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:16:40", "event": "confirmed_like", "count": 32}
+{"at": "2026-07-14T20:16:55", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:16:57", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/nikolalazarov/"}
+{"at": "2026-07-14T20:17:06", "event": "confirmed_like", "count": 33}
+{"at": "2026-07-14T20:17:25", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/nikolalazarov/"}
+{"at": "2026-07-14T20:17:27", "event": "confirmed_comment", "count": 21}
+{"at": "2026-07-14T20:17:39", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:17:49", "event": "confirmed_like", "count": 34}
+{"at": "2026-07-14T20:18:05", "event": "confirmed_comment", "count": 22}
+{"at": "2026-07-14T20:18:15", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:18:17", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:18:20", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/tom-cohen-9b22571a9/"}
+{"at": "2026-07-14T20:18:31", "event": "confirmed_like", "count": 35}
+{"at": "2026-07-14T20:18:49", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/chrismleone/"}
+{"at": "2026-07-14T20:18:51", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:19:16", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/chrismleone/"}
+{"at": "2026-07-14T20:19:20", "event": "confirmed_comment", "count": 23}
+{"at": "2026-07-14T20:19:40", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:19:45", "event": "post_scored", "score": 5, "relevant": false}
+{"at": "2026-07-14T20:19:48", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/chrismleone/"}
+{"at": "2026-07-14T20:19:51", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:20:02", "event": "confirmed_like", "count": 36}
+{"at": "2026-07-14T20:20:16", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:20:19", "event": "post_scored", "score": 10, "relevant": false}
+{"at": "2026-07-14T20:20:22", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:20:35", "event": "confirmed_like", "count": 37}
+{"at": "2026-07-14T20:20:52", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/chasedimond/"}
+{"at": "2026-07-14T20:20:54", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:20:57", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:21:11", "event": "confirmed_like", "count": 38}
+{"at": "2026-07-14T20:21:24", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/sheik-abdul-sulthan-11255775/"}
+{"at": "2026-07-14T20:21:27", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:21:29", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:21:39", "event": "confirmed_like", "count": 39}
+{"at": "2026-07-14T20:21:58", "event": "confirmed_comment", "count": 24}
+{"at": "2026-07-14T20:22:12", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/joshua-george-90078276/"}
+{"at": "2026-07-14T20:22:16", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:22:19", "event": "post_scored", "score": 10, "relevant": false}
+{"at": "2026-07-14T20:22:21", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:22:34", "event": "confirmed_like", "count": 40}
+{"at": "2026-07-14T20:22:53", "event": "confirmed_comment", "count": 25}
+{"at": "2026-07-14T20:23:04", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:23:06", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:23:19", "event": "confirmed_like", "count": 41}
+{"at": "2026-07-14T20:23:37", "event": "confirmed_comment", "count": 26}
+{"at": "2026-07-14T20:23:55", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:23:57", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/azuremis/"}
+{"at": "2026-07-14T20:24:00", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:24:11", "event": "confirmed_like", "count": 42}
+{"at": "2026-07-14T20:24:29", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/azuremis/"}
+{"at": "2026-07-14T20:24:31", "event": "confirmed_comment", "count": 27}
+{"at": "2026-07-14T20:24:51", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:24:54", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:25:08", "event": "confirmed_like", "count": 43}
+{"at": "2026-07-14T20:25:28", "event": "confirmed_comment", "count": 28}
+{"at": "2026-07-14T20:25:44", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/cmedfisch/"}
+{"at": "2026-07-14T20:25:52", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:25:54", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:26:05", "event": "confirmed_like", "count": 44}
+{"at": "2026-07-14T20:26:25", "event": "confirmed_comment", "count": 29}
+{"at": "2026-07-14T20:26:40", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:26:42", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/roger-o-neal-870107411/"}
+{"at": "2026-07-14T20:26:45", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:26:58", "event": "confirmed_like", "count": 45}
+{"at": "2026-07-14T20:27:09", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/roger-o-neal-870107411/"}
+{"at": "2026-07-14T20:27:19", "event": "confirmed_comment", "count": 30}
+{"at": "2026-07-14T20:27:40", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/shir-alyagor/"}
+{"at": "2026-07-14T20:27:42", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:27:45", "event": "post_scored", "score": 78, "relevant": true}
+{"at": "2026-07-14T20:27:48", "event": "post_scored", "score": 95, "relevant": true}
+{"at": "2026-07-14T20:28:02", "event": "confirmed_like", "count": 46}
+{"at": "2026-07-14T20:28:10", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/shir-alyagor/"}
+{"at": "2026-07-14T20:28:17", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:28:20", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:28:23", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:28:30", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:28:32", "event": "connection_drafted", "allowed": true, "profile_url": "https://www.linkedin.com/in/howardkingston/"}
+{"at": "2026-07-14T20:28:36", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:28:46", "event": "confirmed_like", "count": 47}
+{"at": "2026-07-14T20:29:00", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/howardkingston/"}
+{"at": "2026-07-14T20:29:07", "event": "confirmed_comment", "count": 31}
+{"at": "2026-07-14T20:29:25", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/nimyanay/"}
+{"at": "2026-07-14T20:29:28", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:29:30", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:29:40", "event": "confirmed_like", "count": 48}
+{"at": "2026-07-14T20:29:56", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/hilzfuld/"}
+{"at": "2026-07-14T20:30:04", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:30:07", "event": "post_scored", "score": 35, "relevant": true}
+{"at": "2026-07-14T20:30:09", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:30:21", "event": "confirmed_like", "count": 49}
+{"at": "2026-07-14T20:30:40", "event": "confirmed_comment", "count": 32}
+{"at": "2026-07-14T20:30:52", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:30:54", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:31:09", "event": "confirmed_like", "count": 50}
+{"at": "2026-07-14T20:31:30", "event": "confirmed_comment", "count": 33}
+{"at": "2026-07-14T20:31:52", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:31:54", "event": "post_scored", "score": 10, "relevant": false}
+{"at": "2026-07-14T20:31:57", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:31:59", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:32:11", "event": "confirmed_like", "count": 51}
+{"at": "2026-07-14T20:32:29", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:32:31", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:32:37", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:32:50", "event": "confirmed_like", "count": 52}
+{"at": "2026-07-14T20:33:10", "event": "confirmed_comment", "count": 34}
+{"at": "2026-07-14T20:33:29", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:33:32", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:33:35", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:33:38", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:33:52", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:34:06", "event": "confirmed_like", "count": 53}
+{"at": "2026-07-14T20:34:24", "event": "confirmed_comment", "count": 35}
+{"at": "2026-07-14T20:34:45", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-14T20:34:48", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/iamyoav/"}
+{"at": "2026-07-14T20:35:00", "event": "confirmed_like", "count": 54}
+{"at": "2026-07-14T20:35:21", "event": "confirmed_comment", "count": 36}
+{"at": "2026-07-14T20:35:33", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/cdfrost/"}
+{"at": "2026-07-14T20:35:41", "event": "post_scored", "score": 15, "relevant": false}
+{"at": "2026-07-14T20:35:45", "event": "post_scored", "score": 65, "relevant": true}
+{"at": "2026-07-14T20:35:58", "event": "confirmed_like", "count": 55}
+{"at": "2026-07-14T20:36:17", "event": "confirmed_comment", "count": 37}
+{"at": "2026-07-14T20:36:34", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/tom-pestridge/"}
+{"at": "2026-07-14T20:36:39", "event": "post_scored", "score": 0, "relevant": false}
+{"at": "2026-07-14T20:36:41", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-14T20:36:54", "event": "confirmed_like", "count": 56}
+{"at": "2026-07-14T20:37:14", "event": "confirmed_comment", "count": 38}
+{"at": "2026-07-15T00:33:03", "event": "confirmed_instagram_like", "count": 1}
+{"at": "2026-07-15T00:33:21", "event": "confirmed_instagram_like", "count": 2}
+{"at": "2026-07-15T00:33:23", "event": "post_scored", "score": 85, "relevant": true}
+{"at": "2026-07-15T00:33:27", "event": "confirmed_instagram_like", "count": 3}
+{"at": "2026-07-15T00:33:33", "event": "confirmed_instagram_like", "count": 4}
+{"at": "2026-07-15T00:33:38", "event": "confirmed_like", "count": 1}
+{"at": "2026-07-15T00:33:39", "event": "confirmed_instagram_like", "count": 5}
+{"at": "2026-07-15T00:33:45", "event": "confirmed_instagram_like", "count": 6}
+{"at": "2026-07-15T00:33:51", "event": "confirmed_instagram_like", "count": 7}
+{"at": "2026-07-15T00:33:57", "event": "confirmed_instagram_like", "count": 8}
+{"at": "2026-07-15T00:34:02", "event": "post_scored", "score": 72, "relevant": true}
+{"at": "2026-07-15T00:34:03", "event": "confirmed_instagram_like", "count": 9}
+{"at": "2026-07-15T00:34:10", "event": "confirmed_instagram_like", "count": 10}
+{"at": "2026-07-15T00:34:14", "event": "confirmed_like", "count": 2}
+{"at": "2026-07-15T00:34:37", "event": "confirmed_comment", "count": 1}
+{"at": "2026-07-15T00:34:40", "event": "confirmed_instagram_like", "count": 11}
+{"at": "2026-07-15T00:35:46", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/rachelparkco/"}
+{"at": "2026-07-15T00:41:45", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-15T00:41:57", "event": "confirmed_like", "count": 3}
+{"at": "2026-07-15T00:42:19", "event": "confirmed_comment", "count": 2}
+{"at": "2026-07-15T00:42:35", "event": "connection_drafted", "allowed": false, "profile_url": "https://www.linkedin.com/in/aeburne/"}
+{"at": "2026-07-15T00:42:38", "event": "post_scored", "score": 75, "relevant": true}
+{"at": "2026-07-15T00:42:48", "event": "confirmed_like", "count": 4}
+{"at": "2026-07-15T00:43:03", "event": "post_scored", "score": 10, "relevant": false}
+{"at": "2026-07-15T00:43:06", "event": "post_scored", "score": 10, "relevant": false}
+{"at": "2026-07-15T01:09:04", "event": "confirmed_instagram_like", "count": 12}
+{"at": "2026-07-15T01:09:09", "event": "confirmed_instagram_like", "count": 13}
+{"at": "2026-07-15T01:09:15", "event": "confirmed_instagram_like", "count": 14}
+{"at": "2026-07-15T01:09:21", "event": "confirmed_instagram_like", "count": 15}

@@ -1,8 +1,3 @@
-chrome.action.onClicked.addListener(async (tab) => {
-  await chrome.action.setBadgeBackgroundColor({color: "#16a34a", tabId: tab.id});
-  await chrome.action.setBadgeText({text: "OCR", tabId: tab.id});
-});
-
 const profileKey = (rawUrl) => {
   const url = new URL(rawUrl);
   const path = url.pathname.replace(/\/+$/, "");
@@ -66,16 +61,6 @@ const openNextNotificationReply = async () => {
 };
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "captureVisible") {
-    if (!_sender.tab?.active) {
-      sendResponse({ok: false, error: "Instagram tab must be active for screenshot OCR"});
-      return;
-    }
-    chrome.tabs.captureVisibleTab(_sender.tab?.windowId, {format: "jpeg", quality: 75})
-      .then(screenshot => sendResponse({ok: true, screenshot}))
-      .catch(error => sendResponse({ok: false, error: String(error)}));
-    return true;
-  }
   if (message?.type === "openProfiles") {
     (async () => {
       let queued = 0;

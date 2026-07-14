@@ -40,10 +40,10 @@ pause/resume the bot at any time, and the STOP kill switch still shuts it down c
 - Every LinkedIn post rejected by relevance scoring is appended to `skipped_post_topics.txt` with
   the detected topics, configured-topic matches, score, reason, and excerpt. This makes it easy to
   decide which new topics belong in `linkedin_strategy.json`.
-- Instagram home, Explore, post, and Reels surfaces use every-other-item mode. The extension takes
-  a visible screenshot, local Tesseract OCR reads image/video-frame text, and Ollama combines that
-  text with the visible caption before liking or commenting. Separate daily limits cover likes and
-  comments. The Instagram bot never posts, follows, or sends messages.
+- Instagram likes visible feed, Explore, post, and Reel items without reading their content. After
+  every 100 confirmed likes it watches the available story sequence to the end, then resumes liking.
+  Instagram never
+  comments, follows accounts, sends messages, captures screenshots, or runs OCR.
 
 The program does not self-modify or install capabilities autonomously. When a capability is
 missing, it logs the error and stops safely so the code can be reviewed before changes are made.
@@ -54,8 +54,6 @@ missing, it logs the error and stops safely so the code can be reviewed before c
 - Google Chrome
 - [Ollama](https://ollama.com/) running locally
 - An Ollama model such as `llama3.1:8b`
-- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) installed and available as
-  `tesseract.exe` (the standard Windows installer path is detected by `pytesseract`)
 
 ## Setup (PowerShell)
 
@@ -156,7 +154,7 @@ the strategy file so it is loaded again.
 
 ## Reset today's interactions
 
-The following command resets today's LinkedIn counters plus Instagram like and comment counters.
+The following command resets today's LinkedIn counters plus Instagram like and story-view counters.
 Pending LinkedIn connection checks are preserved:
 
 ```powershell
@@ -168,24 +166,18 @@ immediately increments a freshly reset counter.
 
 ## Instagram mode
 
-Sign in to `https://www.instagram.com/` in the same normal Chrome profile. The extension runs on the
-home feed, Explore, individual posts, and Reels. Click the extension icon once while the Instagram
-tab is active to grant Chrome's per-tab screenshot permission for OCR. It shows explicit loading,
-success, failure, blank,
-and skipped states in its panel; the Pause/Resume button has a hover state and freezes countdowns.
-Only every second newly seen item is considered. OCR and comment generation happen locally through
-Tesseract and Ollama. Daily limits are configured under `instagram.daily_limits` in
-`linkedin_strategy.json`.
+Sign in to `https://www.instagram.com/` in the same normal Chrome profile. The extension likes each
+new visible feed, Explore, post, or Reel item and immediately moves on. It does not inspect captions,
+generate text, comment, follow, message, capture screenshots, or use OCR/Ollama for Instagram.
 
-Instagram is not topic-gated. Every second item receives the available engagement actions. The
-caption is treated as authoritative, OCR noise and watermarks are ignored, and the bot panel is
-hidden while the screenshot is captured. If no safe comment can be drafted, liking and scrolling
-still continue instead of skipping the item. Instagram never follows accounts or sends messages.
+Instagram likes have no daily limit. A persistent counter survives day changes and restarts. When
+it reaches `story_interval_likes` (100 by default), the extension opens Stories, leaves each story
+visible for four seconds, advances until no Next control remains, resets the counter, and resumes
+normal post/reel liking. The panel provides loading, success, failure, blank, and filled states;
+its Pause/Resume button has a hover state and pauses both likes and story advancement.
 
-Instagram changes its HTML frequently. When a Like or comment control
-cannot be confirmed, the action is reported as a failure and its daily counter is not incremented.
-The bot automatically advances after skipped, processed, or completed items. On Explore, it opens
-every second visible post/reel tile, processes the modal, closes it, and continues down the grid.
+Instagram changes its HTML frequently. Likes count only after the Like control changes to Unlike.
+Story views count only after the story has remained visible for the viewing interval.
 
 Optional pre-submit countdown override (the default is 10 seconds):
 

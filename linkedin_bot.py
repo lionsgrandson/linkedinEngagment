@@ -16,22 +16,18 @@ import signal
 import shutil
 import sys
 import time
-from base64 import b64decode
 from dataclasses import dataclass
 from datetime import date, datetime
-from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import requests
-import pytesseract
 from dotenv import load_dotenv
-from PIL import Image
 from playwright.sync_api import BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 
-APP_VERSION = "3.5.1"
+APP_VERSION = "3.7.0"
 ROOT = Path(__file__).resolve().parent
 STOP_FILE = ROOT / "STOP"
 STATE_FILE = ROOT / "state.json"
@@ -193,7 +189,8 @@ def load_state() -> dict[str, Any]:
     default = {"day": date.today().isoformat(), "comments": 0, "likes": 0,
                "messages": 0, "connections": 0, "pending_connections": [],
                "notification_replies": 0, "replied_notification_ids": [],
-               "last_followup_day": "", "instagram_comments": 0, "instagram_likes": 0}
+               "last_followup_day": "", "instagram_likes": 0,
+               "instagram_story_views": 0, "instagram_likes_since_stories": 0}
     if not STATE_FILE.exists():
         return default
     try:
@@ -205,11 +202,15 @@ def load_state() -> dict[str, Any]:
         default["pending_connections"] = state.get("pending_connections", [])
         default["replied_notification_ids"] = state.get("replied_notification_ids", [])
         default["last_followup_day"] = state.get("last_followup_day", "")
+        default["instagram_likes_since_stories"] = state.get(
+            "instagram_likes_since_stories", 0
+        )
         return default
     merged = {**default, **state}
     merged.pop("posts", None)
     merged.pop("instagram_follows", None)
     merged.pop("instagram_messages", None)
+    merged.pop("instagram_comments", None)
     return merged
 
 
@@ -391,16 +392,6 @@ POST:\n{post_text[:5000]}"""
         return {"relevant": False, "reason": "analysis failed", "score": 0}
 
 
-def ocr_screenshot(data_url: str) -> str:
-    """Extract visible text from a browser screenshot using local Tesseract OCR."""
-    if not data_url or "," not in data_url:
-        return ""
-    _, encoded = data_url.split(",", 1)
-    image = Image.open(BytesIO(b64decode(encoded)))
-    image.thumbnail((1800, 1800))
-    return " ".join(pytesseract.image_to_string(image).split())[:5000]
-
-
 def sanitize_comment(raw_comment: str) -> str:
     """Remove model narration and speaker labels so only the comment can be submitted."""
     text = str(raw_comment or "").strip()
@@ -432,47 +423,6 @@ def sanitize_comment(raw_comment: str) -> str:
     if len(text) >= 2 and text[0] == text[-1] == "'":
         text = text[1:-1].strip()
     return text
-
-
-def instagram_interaction(caption: str, screenshot_data_url: str) -> dict[str, Any]:
-    """Use caption-first OCR context without topic gating Instagram engagement."""
-    fallback_comment = "What inspired you to share this?"
-    try:
-        ocr_text = ocr_screenshot(screenshot_data_url)
-    except Exception:
-        logging.exception("Instagram OCR failed")
-        ocr_text = ""
-    context = "\n".join(part for part in (caption.strip(), ocr_text) if part).strip()
-    if not context:
-        return {"allowed": True, "reason": "no readable text; using neutral comment",
-                "comment": fallback_comment, "ocr_text": ""}
-    prompt = f"""Write one short, natural Instagram comment as Moshe Schwartzberg.
-Instagram engagement is NOT topic-gated: always draft a comment regardless of the subject.
-The visible caption is authoritative. OCR is supplementary and may contain garbled characters,
-navigation labels, watermarks, or interface text; ignore those artifacts instead of rejecting the
-item. Use one reliable concrete detail, be friendly, non-salesy, and truthful. Do not mention OCR,
-automation, CodeCrafter, or invent personal experience. Avoid hashtags, sensitive-trait inferences,
-and calls to move the conversation elsewhere. Return JSON only:
-{{"allowed":true,"reason":"short reason","comment":"one short comment"}}.
-
-CAPTION:\n{caption[:5000]}\n\nSUPPLEMENTARY OCR:\n{ocr_text[:3000]}"""
-    try:
-        result = json.loads(ollama(prompt, json_mode=True))
-    except (ValueError, requests.RequestException):
-        logging.exception("Instagram comment generation failed")
-        return {"allowed": True, "reason": "generation failed; using neutral comment",
-                "comment": fallback_comment, "ocr_text": ocr_text}
-    comment = sanitize_comment(result.get("comment", ""))
-    if not comment:
-        return {"allowed": True, "reason": "model returned no comment; using neutral comment",
-                "comment": fallback_comment, "ocr_text": ocr_text}
-    review_context = caption.strip() or ocr_text
-    review = evaluate_comment(review_context, comment)
-    if not review.get("pass") or int(review.get("confidence", 0)) < 75:
-        return {"allowed": True, "reason": "review noted a concern; using generated comment",
-                "comment": comment, "ocr_text": ocr_text, "review": review}
-    return {"allowed": True, "reason": result.get("reason", "approved"),
-            "comment": comment, "ocr_text": ocr_text, "review": review}
 
 
 def generate_comment(post_text: str) -> str:

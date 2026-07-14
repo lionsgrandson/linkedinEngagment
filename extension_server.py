@@ -48,15 +48,17 @@ def run_server(bot) -> None:
                 level = logging.INFO if data.get("ok") else logging.ERROR
                 logging.log(level, "Browser action result: ok=%s reason=%s", data.get("ok"), data.get("reason"))
                 supported = {"like", "comment", "message", "connection", "notification_reply",
-                             "instagram_like", "instagram_comment"}
+                             "instagram_like", "instagram_story_view"}
                 if data.get("ok") and data.get("kind") in supported:
                     state = bot.load_state()
                     counter = {"like": "likes", "comment": "comments",
                                "message": "messages", "connection": "connections",
                                "notification_reply": "notification_replies",
                                "instagram_like": "instagram_likes",
-                               "instagram_comment": "instagram_comments"}[data["kind"]]
+                               "instagram_story_view": "instagram_story_views"}[data["kind"]]
                     state[counter] += 1
+                    if data["kind"] == "instagram_like":
+                        state["instagram_likes_since_stories"] += 1
                     url = data.get("url", "")
                     if data["kind"] == "connection" and url:
                         state["pending_connections"] = [p for p in state["pending_connections"] if p.get("url") != url]
@@ -72,7 +74,7 @@ def run_server(bot) -> None:
                     bot.record_metric(f"confirmed_{data['kind']}", count=state[counter])
                     logging.info("Confirmed daily counter updated: %s=%s", counter, state[counter])
                 return self.reply({"received": True})
-            if self.path == "/instagram-decide":
+            if self.path == "/instagram-status":
                 diagnostics = data.get("diagnostics", {})
                 extension_status.update({
                     "seen": True,
@@ -82,25 +84,21 @@ def run_server(bot) -> None:
                     "seen_at": bot.datetime.now().isoformat(timespec="seconds"),
                 })
                 state = bot.load_state()
-                limits = bot.STRATEGY["instagram"]["daily_limits"]
-                if (state["instagram_likes"] >= limits["likes"] and
-                        state["instagram_comments"] >= limits["comments"]):
-                    return self.reply({"allowed": False,
-                                       "reason": "Instagram daily interaction limits reached"})
-                result = bot.instagram_interaction(
-                    data.get("caption", ""), data.get("screenshot", "")
-                )
-                result["like"] = state["instagram_likes"] < limits["likes"]
-                result["comment"] = (result.get("comment", "")
-                                     if state["instagram_comments"] < limits["comments"] else "")
-                logging.info(
-                    "Instagram decision: allowed=%s like=%s comment_chars=%d reason=%s",
-                    result.get("allowed"), result.get("like"), len(result.get("comment", "")),
-                    result.get("reason", ""),
-                )
-                bot.record_metric("instagram_ocr_decision", allowed=result.get("allowed"),
-                                  ocr_chars=len(result.get("ocr_text", "")))
-                return self.reply(result)
+                interval = bot.STRATEGY["instagram"].get("story_interval_likes", 100)
+                return self.reply({
+                    "shouldWatchStories": state["instagram_likes_since_stories"] >= interval,
+                    "confirmedLikesSinceStories": state["instagram_likes_since_stories"],
+                    "likesUntilStories": max(0, interval - state["instagram_likes_since_stories"]),
+                })
+            if self.path == "/instagram-story-batch-complete":
+                state = bot.load_state()
+                completed_likes = state["instagram_likes_since_stories"]
+                interval = bot.STRATEGY["instagram"].get("story_interval_likes", 100)
+                state["instagram_likes_since_stories"] = 0
+                bot.save_state(state)
+                bot.record_metric("instagram_story_batch_complete", likes=completed_likes,
+                                  story_views=state["instagram_story_views"])
+                return self.reply({"completed": True, "nextStoryBatchAfterLikes": interval})
             if self.path == "/daily-followups":
                 state = bot.load_state()
                 due = bot.begin_daily_followups(state)
