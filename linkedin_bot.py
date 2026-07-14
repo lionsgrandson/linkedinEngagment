@@ -11,21 +11,27 @@ import json
 import logging
 import os
 import random
+import re
 import signal
 import shutil
 import sys
 import time
+from base64 import b64decode
 from dataclasses import dataclass
 from datetime import date, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import requests
+import pytesseract
+from dotenv import load_dotenv
+from PIL import Image
 from playwright.sync_api import BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 
-APP_VERSION = "3.2.4"
+APP_VERSION = "3.5.1"
 ROOT = Path(__file__).resolve().parent
 STOP_FILE = ROOT / "STOP"
 STATE_FILE = ROOT / "state.json"
@@ -35,6 +41,7 @@ METRICS_FILE = ROOT / "linkedin_metrics.jsonl"
 SKIPPED_POST_TOPICS_FILE = ROOT / "skipped_post_topics.txt"
 DEFAULT_CHROME_DATA = Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data"
 AUTOMATION_CHROME_DATA = ROOT / ".chrome-profile"
+load_dotenv(ROOT / ".env")
 
 
 @dataclass(frozen=True)
@@ -183,8 +190,10 @@ def pre_submit_countdown(page: Page, action: str) -> bool:
 
 
 def load_state() -> dict[str, Any]:
-    default = {"day": date.today().isoformat(), "posts": 0, "comments": 0, "likes": 0,
-               "messages": 0, "connections": 0, "pending_connections": []}
+    default = {"day": date.today().isoformat(), "comments": 0, "likes": 0,
+               "messages": 0, "connections": 0, "pending_connections": [],
+               "notification_replies": 0, "replied_notification_ids": [],
+               "last_followup_day": "", "instagram_comments": 0, "instagram_likes": 0}
     if not STATE_FILE.exists():
         return default
     try:
@@ -194,8 +203,23 @@ def load_state() -> dict[str, Any]:
         return default
     if state.get("day") != default["day"]:
         default["pending_connections"] = state.get("pending_connections", [])
+        default["replied_notification_ids"] = state.get("replied_notification_ids", [])
+        default["last_followup_day"] = state.get("last_followup_day", "")
         return default
-    return {**default, **state}
+    merged = {**default, **state}
+    merged.pop("posts", None)
+    merged.pop("instagram_follows", None)
+    merged.pop("instagram_messages", None)
+    return merged
+
+
+def begin_daily_followups(state: dict[str, Any]) -> bool:
+    """Claim today's follow-up batch once, even across bot restarts."""
+    today = date.today().isoformat()
+    if state.get("last_followup_day") == today:
+        return False
+    state["last_followup_day"] = today
+    return True
 
 
 def save_state(state: dict[str, Any]) -> None:
@@ -211,22 +235,28 @@ def record_metric(event: str, **details: Any) -> None:
 
 
 def record_skipped_post(post_text: str, analysis: dict[str, Any]) -> None:
-    if not SKIPPED_POST_TOPICS_FILE.exists():
+    if not SKIPPED_POST_TOPICS_FILE.exists() or SKIPPED_POST_TOPICS_FILE.stat().st_size == 0:
         SKIPPED_POST_TOPICS_FILE.write_text("Skipped post topics\n==================\n", encoding="utf-8")
 
     text = " ".join(post_text.split())
+    detected_topics = analysis.get("topics", [])
+    if isinstance(detected_topics, str):
+        detected_topics = [detected_topics]
     matched_topics = [
         topic for topic in STRATEGY.get("engagement_topics", [])
         if topic.lower() in text.lower()
     ]
-    if not matched_topics:
-        matched_topics = ["no matching engagement topics"]
+    topics = [str(topic).strip() for topic in detected_topics if str(topic).strip()]
+    if not topics:
+        topics = matched_topics or ["unclassified"]
 
-    excerpt = text[:180]
+    excerpt = text[:180].rstrip()
     entry = (
         f"{datetime.now().isoformat(timespec='seconds')} | "
         f"reason={analysis.get('reason', 'unknown')} | "
-        f"topics={', '.join(matched_topics)} | excerpt={excerpt}\n"
+        f"detected_topics={', '.join(topics)} | "
+        f"configured_matches={', '.join(matched_topics) if matched_topics else 'none'} | "
+        f"score={analysis.get('score', 0)} | excerpt={excerpt}\n"
     )
     with SKIPPED_POST_TOPICS_FILE.open("a", encoding="utf-8") as stream:
         stream.write(entry)
@@ -328,6 +358,17 @@ def ollama(prompt: str, *, json_mode: bool = False) -> str:
     return generated
 
 
+def installed_ollama_models() -> list[str]:
+    """Return locally installed model names for actionable startup diagnostics."""
+    try:
+        response = requests.get(f"{SETTINGS.ollama_url}/api/tags", timeout=10)
+        response.raise_for_status()
+        return [str(model.get("name", "")) for model in response.json().get("models", [])
+                if model.get("name")]
+    except (requests.RequestException, ValueError):
+        return []
+
+
 def relevant_post(post_text: str) -> dict[str, Any]:
     prompt = f"""You are a cautious LinkedIn research assistant for this positioning:
 {STRATEGY['positioning']}
@@ -337,9 +378,10 @@ Mark relevant=true when the post substantively concerns ANY ONE engagement topic
 buying signals, referral fit, or a genuine web/automation problem CodeCrafter
 ({SETTINGS.company_url}) can solve should raise the score, but they are NOT required. For example,
 a useful software-development, AI, Zionism, personal-growth, or technology post is relevant even
-without funding or hiring signals. Never infer sensitive traits. Do not treat mere keyword overlap
-as relevance. Return JSON only:
-{{"relevant": true|false, "reason": "short reason", "score": 0-100}}.
+without funding or hiring signals. Never infer sensitive traits. Identify up to three plain-language
+topics even when the post is irrelevant. Return JSON only:
+{{"relevant": true|false, "reason": "short reason", "score": 0-100,
+"topics": ["topic one", "topic two"]}}.
 
 POST:\n{post_text[:5000]}"""
     try:
@@ -347,6 +389,90 @@ POST:\n{post_text[:5000]}"""
     except (ValueError, requests.RequestException):
         logging.exception("Ollama relevance analysis failed")
         return {"relevant": False, "reason": "analysis failed", "score": 0}
+
+
+def ocr_screenshot(data_url: str) -> str:
+    """Extract visible text from a browser screenshot using local Tesseract OCR."""
+    if not data_url or "," not in data_url:
+        return ""
+    _, encoded = data_url.split(",", 1)
+    image = Image.open(BytesIO(b64decode(encoded)))
+    image.thumbnail((1800, 1800))
+    return " ".join(pytesseract.image_to_string(image).split())[:5000]
+
+
+def sanitize_comment(raw_comment: str) -> str:
+    """Remove model narration and speaker labels so only the comment can be submitted."""
+    text = str(raw_comment or "").strip()
+    text = re.sub(r"^```(?:text|markdown)?\s*|\s*```$", "", text,
+                  flags=re.IGNORECASE).strip()
+    text = text.replace("**", "").strip()
+    prefixes = (
+        r"^here(?:'s| is)\s+(?:a\s+)?(?:proposed|possible|potential|good|suggested)?\s*"
+        r"(?:comment|response)(?:\s+as\s+moshe(?:\s+s\.?|\s+schwartzberg)?)?\s*[:\-]\s*",
+        r"^this\s+is\s+(?:a\s+)?(?:proposed|possible|potential|good|suggested)?\s*"
+        r"(?:comment|response)(?:\s+as\s+moshe(?:\s+s\.?|\s+schwartzberg)?)?\s*[:\-]\s*",
+        r"^(?:proposed|possible|potential|good|suggested)\s+(?:comment|response)"
+        r"(?:\s+as\s+moshe(?:\s+s\.?|\s+schwartzberg)?)?\s*[:\-]\s*",
+        r"^(?:comment|response)(?:\s+as\s+moshe(?:\s+s\.?|\s+schwartzberg)?)?\s*[:\-]\s*",
+        r"^as\s+moshe(?:\s+s\.?|\s+schwartzberg)?\s*,?\s*(?:i(?:'d| would)\s+comment)?\s*[:\-]\s*",
+        r"^moshe(?:\s+s\.?|\s+schwartzberg)?\s*[:\-]\s*",
+    )
+    for _ in range(3):
+        original = text
+        for pattern in prefixes:
+            text = re.sub(pattern, "", text, count=1, flags=re.IGNORECASE).strip()
+        if text == original:
+            break
+    lines = text.splitlines()
+    if (len(lines) > 1 and len(lines[0]) < 140 and
+            re.search(r"\b(comment|response)\b", lines[0], re.IGNORECASE)):
+        text = "\n".join(lines[1:]).strip()
+    text = text.strip().strip('"“”').strip()
+    if len(text) >= 2 and text[0] == text[-1] == "'":
+        text = text[1:-1].strip()
+    return text
+
+
+def instagram_interaction(caption: str, screenshot_data_url: str) -> dict[str, Any]:
+    """Use caption-first OCR context without topic gating Instagram engagement."""
+    fallback_comment = "What inspired you to share this?"
+    try:
+        ocr_text = ocr_screenshot(screenshot_data_url)
+    except Exception:
+        logging.exception("Instagram OCR failed")
+        ocr_text = ""
+    context = "\n".join(part for part in (caption.strip(), ocr_text) if part).strip()
+    if not context:
+        return {"allowed": True, "reason": "no readable text; using neutral comment",
+                "comment": fallback_comment, "ocr_text": ""}
+    prompt = f"""Write one short, natural Instagram comment as Moshe Schwartzberg.
+Instagram engagement is NOT topic-gated: always draft a comment regardless of the subject.
+The visible caption is authoritative. OCR is supplementary and may contain garbled characters,
+navigation labels, watermarks, or interface text; ignore those artifacts instead of rejecting the
+item. Use one reliable concrete detail, be friendly, non-salesy, and truthful. Do not mention OCR,
+automation, CodeCrafter, or invent personal experience. Avoid hashtags, sensitive-trait inferences,
+and calls to move the conversation elsewhere. Return JSON only:
+{{"allowed":true,"reason":"short reason","comment":"one short comment"}}.
+
+CAPTION:\n{caption[:5000]}\n\nSUPPLEMENTARY OCR:\n{ocr_text[:3000]}"""
+    try:
+        result = json.loads(ollama(prompt, json_mode=True))
+    except (ValueError, requests.RequestException):
+        logging.exception("Instagram comment generation failed")
+        return {"allowed": True, "reason": "generation failed; using neutral comment",
+                "comment": fallback_comment, "ocr_text": ocr_text}
+    comment = sanitize_comment(result.get("comment", ""))
+    if not comment:
+        return {"allowed": True, "reason": "model returned no comment; using neutral comment",
+                "comment": fallback_comment, "ocr_text": ocr_text}
+    review_context = caption.strip() or ocr_text
+    review = evaluate_comment(review_context, comment)
+    if not review.get("pass") or int(review.get("confidence", 0)) < 75:
+        return {"allowed": True, "reason": "review noted a concern; using generated comment",
+                "comment": comment, "ocr_text": ocr_text, "review": review}
+    return {"allowed": True, "reason": result.get("reason", "approved"),
+            "comment": comment, "ocr_text": ocr_text, "review": review}
 
 
 def generate_comment(post_text: str) -> str:
@@ -361,26 +487,32 @@ Business positioning for context only: {STRATEGY['positioning']}
 Be specific to the post, natural, non-salesy, and honest. Do not claim experiences or results
 not supplied. Do not use generic praise, engagement bait, hashtags, or mention CodeCrafter unless
 it is directly useful. Output only the proposed comment.\n\nPOST:\n{post_text[:5000]}"""
-    return ollama(prompt)
+    return sanitize_comment(ollama(prompt))
 
 
-def generate_daily_post(samples: list[str], state: dict[str, Any]) -> dict[str, Any]:
-    """Generate at most one strategy-aligned post per day."""
-    if state["posts"] >= 1:
-        return {"allowed": False, "reason": "daily post already used"}
-    prompt = f"""Create today's LinkedIn post for Moshe Schwartzberg.
-Positioning: {STRATEGY['positioning']}
-Offer: {STRATEGY['offer']}
-Outcome: {STRATEGY['outcome']}
-Content mix: {json.dumps(STRATEGY['content_mix'])}
-Topic options: {json.dumps(STRATEGY['content_topics'], ensure_ascii=False)}
-Use the visible samples only as qualitative context: {json.dumps(samples[:6], ensure_ascii=False)}
-Choose tactical advice most often, founder POV sometimes, and an offer/case-study angle rarely.
-Do not fabricate revenue, clients, metrics, or results. Use a useful low-pressure CTA. Return JSON:
-{{"category":"tactical|founder_pov|offer_case_study","topic":"...","draft":"..."}}"""
-    result = json.loads(ollama(prompt, json_mode=True))
-    result["allowed"] = True
-    return result
+def draft_notification_reply(thread_context: str, notification_text: str) -> dict[str, Any]:
+    """Draft and independently review a reply to someone who answered our comment."""
+    prompt = f"""Write one short LinkedIn reply as Moshe Schwartzberg to the person who replied
+to his earlier comment. Answer their actual point naturally and continue the conversation. Be
+friendly, specific, truthful, and non-salesy. Do not mention automation, do not pitch, do not invent
+experience, and do not repeat Moshe's original comment. Return JSON only:
+{{"allowed":true|false,"reason":"short reason","reply":"reply text"}}.
+
+NOTIFICATION:\n{notification_text[:1200]}\n\nVISIBLE THREAD:\n{thread_context[:5000]}"""
+    try:
+        result = json.loads(ollama(prompt, json_mode=True))
+    except (ValueError, requests.RequestException):
+        logging.exception("Notification reply generation failed")
+        return {"allowed": False, "reason": "reply generation failed", "reply": ""}
+    reply = sanitize_comment(result.get("reply", ""))
+    if not result.get("allowed") or not reply:
+        return {"allowed": False, "reason": result.get("reason", "empty reply"), "reply": ""}
+    review = evaluate_comment(f"{notification_text}\n{thread_context}", reply)
+    if not review.get("pass") or int(review.get("confidence", 0)) < 80:
+        return {"allowed": False, "reason": review.get("reason", "reply review failed"),
+                "reply": ""}
+    return {"allowed": True, "reason": result.get("reason", "approved"),
+            "reply": reply, "review": review}
 
 
 def draft_relationship_message(profile_context: str, stage: str) -> dict[str, Any]:
@@ -511,46 +643,6 @@ def analyze_feed(page: Page, state: dict[str, Any]) -> None:
             logging.exception("Unexpected error while processing a post")
 
 
-def research_daily_post(page: Page, state: dict[str, Any]) -> None:
-    if state["posts"] >= 1:
-        return
-    # Research is grounded only in posts currently visible to the signed-in user.
-    samples = [post_text(p)[:1500] for p in visible_posts(page) if len(post_text(p)) > 50][:6]
-    prompt = f"""Using the visible LinkedIn samples below as qualitative research, propose one
-useful post for Moshe Schwartzberg, serving small businesses and web/tech professionals through
-CodeCrafter ({SETTINGS.company_url}). Do not pretend this small sample proves an optimal posting
-time. Recommend a testable time window, format, topic, and length, then draft the post. Be useful,
-specific, non-salesy, and do not fabricate metrics or client stories. Return JSON with keys
-recommended_time, rationale, format, topic, draft.\n\nSAMPLES:\n{json.dumps(samples)}"""
-    try:
-        result = json.loads(ollama(prompt, json_mode=True))
-    except (ValueError, requests.RequestException):
-        logging.exception("Daily post research failed")
-        return
-    print("\nDaily post research:\n" + json.dumps(result, indent=2, ensure_ascii=False))
-    draft = str(result.get("draft", "")).strip()
-    if not draft:
-        logging.warning("Ollama returned an empty daily post draft; nothing will be posted")
-        return
-    if not interruptible_delay("open post composer", page):
-        return
-    page.locator("button:has-text('Start a post')").first.click()
-    if not interruptible_delay("fill daily post editor", page):
-        return
-    editor = page.locator("div[contenteditable='true'][role='textbox']").first
-    editor.wait_for(state="visible", timeout=10_000)
-    editor.fill(draft)
-    if pre_submit_countdown(page, "daily post"):
-        page.locator("button.share-actions__primary-action").first.click()
-        state["posts"] = 1
-        state["last_post_at"] = datetime.now().isoformat(timespec="seconds")
-        save_state(state)
-        set_panel_status(page, "Running - daily post submitted")
-        logging.info("Published the daily post after the visible countdown")
-    else:
-        logging.info("Daily draft left unposted for manual review")
-
-
 def run() -> None:
     configure_logging()
     signal.signal(signal.SIGINT, handle_stop)
@@ -560,9 +652,26 @@ def run() -> None:
     logging.info("Starting LinkedIn copilot v%s with model %s", APP_VERSION, SETTINGS.ollama_model)
     try:
         ollama("Reply with OK only.")
+    except requests.HTTPError as exc:
+        models = installed_ollama_models()
+        detail = ""
+        try:
+            detail = str(exc.response.json().get("error", ""))
+        except (AttributeError, ValueError):
+            pass
+        installed = ", ".join(models) if models else "could not read installed models"
+        logging.exception("Configured Ollama model is unavailable")
+        raise SystemExit(
+            f"Ollama model '{SETTINGS.ollama_model}' is unavailable"
+            f"{f': {detail}' if detail else '.'} Installed models: {installed}. "
+            "Set OLLAMA_MODEL to one of those names or run: "
+            f"ollama pull {SETTINGS.ollama_model}"
+        ) from exc
     except requests.RequestException as exc:
         logging.exception("Ollama is unavailable")
-        raise SystemExit(f"Ollama unavailable: {exc}") from exc
+        raise SystemExit(
+            f"Cannot reach Ollama at {SETTINGS.ollama_url}: {exc}. Start it with: ollama serve"
+        ) from exc
     from extension_server import run_server
     run_server(sys.modules[__name__])
     return
@@ -604,7 +713,6 @@ def run() -> None:
         try:
             while not stop_requested():
                 analyze_feed(page, state)
-                research_daily_post(page, state)
                 print("\nCycle complete. Waiting before refreshing the visible feed.")
                 if not interruptible_delay("next feed cycle", page):
                     break

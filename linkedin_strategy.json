@@ -40,14 +40,15 @@
     "software development",
     "artificial intelligence"
   ],
-  "content_mix": { "tactical": 70, "founder_pov": 20, "offer_case_study": 10 },
-  "content_topics": [
-    "Most B2B startups do not have a lead problem; they have a targeting and follow-up problem.",
-    "The five fields every startup CRM needs before outbound starts.",
-    "A before-and-after breakdown of a better cold message for startup founders.",
-    "Why paid ads amplify a working message but do not repair a broken one.",
-    "How to build a referral loop with fractional CMOs, startup advisors, lawyers, accountants, VCs, accelerators, and dev shops."
-  ],
+  "min_relevance_score": 55,
+  "instagram": {
+    "interaction_pattern": "every_other_post",
+    "surfaces": ["home", "explore", "posts", "reels"],
+    "daily_limits": {
+      "comments": 10,
+      "likes": 20
+    }
+  },
   "message_stages": {
     "connection": "Short personalized request based on one visible fact; no pitch.",
     "accepted": "Friendly non-pitch opener tied to their role or recent post.",
@@ -56,10 +57,10 @@
     "partner": "Explain the referral fit, clean tracking, and 20% of the first three months after client payment clears."
   },
   "daily_limits": {
-    "posts": 1,
     "comments": 50,
     "likes": 50,
     "messages": 10,
-    "connections": 50
+    "connections": 50,
+    "notification_replies": 10
   }
 }

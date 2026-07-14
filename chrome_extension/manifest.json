@@ -1,15 +1,41 @@
 {
   "manifest_version": 3,
-  "name": "CodeCrafter LinkedIn Bridge",
-  "version": "3.2.4",
-  "description": "Connects the local Ollama engagement bot to the signed-in LinkedIn tab.",
-  "permissions": ["tabs", "storage"],
-  "host_permissions": ["https://www.linkedin.com/*", "http://127.0.0.1:8765/*"],
-  "background": { "service_worker": "service_worker.js" },
+  "name": "CodeCrafter Social Bridge",
+  "version": "3.5.1",
+  "description": "Connects the local Ollama engagement bot to signed-in LinkedIn and Instagram tabs.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://www.instagram.com/*",
+    "http://127.0.0.1:8765/*"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "action": {
+    "default_title": "Enable Instagram screenshot OCR for this tab"
+  },
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "instagram_content.js"
+      ],
       "run_at": "document_idle"
     }
   ]
