@@ -9,4 +9,6 @@ STOP
 .env
 .codex-change-log.txt
 account_metrics.jsonl
+linkedin_metrics.jsonl
+skipped_post_topics.txt
 reports/

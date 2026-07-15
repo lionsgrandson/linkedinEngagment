@@ -29,7 +29,7 @@ from playwright.sync_api import BrowserContext, Page, TimeoutError as Playwright
 from playwright.sync_api import sync_playwright
 
 
-APP_VERSION = "3.15.2"
+APP_VERSION = "3.15.3"
 ROOT = Path(__file__).resolve().parent
 STOP_FILE = ROOT / "STOP"
 STATE_FILE = ROOT / "state.json"
