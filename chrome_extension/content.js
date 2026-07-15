@@ -1,13 +1,14 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.7.0'
-  const EXTENSION_BUILD = 'fd2bf36f0dac'
+  const EXTENSION_VERSION = '3.15.2'
+  const EXTENSION_BUILD = '3aff3d89f9ea'
   let paused = false
   let busy = false
   const processed = new Set()
   const queuedProfiles = new Set()
   let dailyFollowupCheckedDay = ''
+  let priorityRequested = false
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   const api = (path, method = 'GET', body = null) =>
@@ -45,6 +46,21 @@
         /^(Connect(?: with .+)?|Invite .+ to connect)$/i.test(value),
       ),
     )
+  const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim()
+  const editorText = (editor) => normalizeText(
+    editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement
+      ? editor.value
+      : editor?.textContent,
+  )
+  const feedbackText = () => normalizeText([
+    ...document.querySelectorAll("[role='alert'],.artdeco-toast-item,[role='dialog']"),
+  ].filter(visible).map(label).join(' '))
+  const blockingFeedback = () => {
+    const message = feedbackText()
+    return /couldn.?t|unable to|try again|something went wrong|invitation limit|email address|required|not available|failed/i.test(message)
+      ? message.slice(0, 400)
+      : ''
+  }
   async function waitForConnectionConfirmation(dialog, timeout = 12000) {
     const deadline = Date.now() + timeout
     while (Date.now() < deadline) {
@@ -53,12 +69,10 @@
       ].filter(visible).map(label).join(' ')
       if (/invitation (?:was )?sent|request (?:was )?sent/i.test(pageText))
         return { ok: true, reason: 'LinkedIn confirmed invitation sent' }
-      if (/couldn.?t send|unable to send|try again|something went wrong/i.test(pageText))
+      if (/couldn.?t send|unable to send|try again|something went wrong|invitation limit|email address|required/i.test(pageText))
         return { ok: false, reason: pageText.slice(0, 300) }
       if (findControl(/^Pending(?:\s|$)|Invitation pending/i))
         return { ok: true, reason: 'LinkedIn shows the invitation as pending' }
-      if (dialog && !visible(dialog))
-        return { ok: true, reason: 'LinkedIn closed the invitation dialog after Send' }
       await sleep(250)
     }
     return { ok: false, reason: 'LinkedIn did not confirm the connection request' }
@@ -73,6 +87,7 @@
       editor.dispatchEvent(new Event('input', { bubbles: true }))
       editor.dispatchEvent(new Event('change', { bubbles: true }))
     } else {
+      editor.textContent = ''
       document.execCommand('insertText', false, text)
       editor.dispatchEvent(new InputEvent('input', {
         bubbles: true,
@@ -80,6 +95,7 @@
         data: text,
       }))
     }
+    return editorText(editor) === normalizeText(text)
   }
   async function waitForEditorClear(editor, timeout = 10000) {
     const deadline = Date.now() + timeout
@@ -92,6 +108,57 @@
     }
     return false
   }
+  async function waitForExactOutgoingMessage(expected, timeout = 12000) {
+    const wanted = normalizeText(expected)
+    const deadline = Date.now() + timeout
+    while (Date.now() < deadline) {
+      const outgoing = [...document.querySelectorAll(
+        "li.msg-s-message-list__event,.msg-s-event-listitem,[data-view-name*='message']",
+      )].filter(visible).some((item) => {
+        const content = normalizeText(item.innerText)
+        return content.includes(wanted) && /Moshe Schwartzberg sent the following message|\bYou\b/i.test(content)
+      })
+      if (outgoing) return true
+      if (blockingFeedback()) return false
+      await sleep(300)
+    }
+    return false
+  }
+
+  const commentRoots = (root = document) => [...root.querySelectorAll(
+    ".comments-comment-item,[data-view-name='comment-item'],[data-urn*='comment']",
+  )].filter(visible)
+  const hasExactComment = (root, expected) => {
+    const wanted = normalizeText(expected)
+    const signature = wanted.slice(0, 100)
+    return Boolean(wanted) && commentRoots(root).some(
+      (comment) => normalizeText(comment.innerText).includes(signature),
+    )
+  }
+  const hasOwnComment = (root) => commentRoots(root).some((comment) => {
+    const content = `${label(comment)} ${comment.innerText || ''}`
+    return /Moshe Schwartzberg(?:’|'|â€™)?s comment|View Moshe(?: Schwartzberg)?(?:’|'|â€™)?s profile|\bMoshe Schwartzberg\b/i.test(content)
+  })
+  async function expandComments(root) {
+    for (let pass = 0; pass < 3; pass += 1) {
+      const control = findControl(/^(Load|Show|View) (more|previous|all|\d+) (comments|replies)/i, root)
+      if (!control) return
+      control.scrollIntoView({block: 'center'})
+      control.click()
+      await sleep(1200)
+    }
+  }
+  async function waitForExactComment(root, expected, timeout = 12000) {
+    const deadline = Date.now() + timeout
+    while (Date.now() < deadline) {
+      if (hasExactComment(root, expected))
+        return {ok: true, reason: 'LinkedIn shows the submitted comment signature'}
+      const blocked = blockingFeedback()
+      if (blocked) return {ok: false, reason: blocked}
+      await sleep(300)
+    }
+    return {ok: false, reason: 'LinkedIn did not display the exact submitted comment'}
+  }
 
   function panel() {
     if (document.getElementById('cc-bot-controls')) return
@@ -102,6 +169,10 @@
     box.innerHTML =
       `<style>@keyframes ccPulse{50%{opacity:.35}}#cc-status[data-state="loading"]::after{content:"";display:block;width:72%;height:7px;margin-top:7px;border-radius:5px;background:#94a3b8;animation:ccPulse 1s infinite}</style><b>CodeCrafter Bot v${EXTENSION_VERSION}</b><div id="cc-status" data-state="loading" style="margin:9px 0">Connecting to Python...</div><button id="cc-pause" style="width:100%;padding:10px;border:0;border-radius:8px;background:#f59e0b;font-weight:700;cursor:pointer;transition:filter .15s">Pause bot</button>`
     document.documentElement.appendChild(box)
+    CodeCrafterSettings.load().then(({ui}) => {
+      if (!ui.showOverlay) box.style.display = 'none'
+      if (ui.compactOverlay) Object.assign(box.style, {width: '205px', padding: '8px', fontSize: '12px'})
+    })
     const button = box.querySelector('#cc-pause')
     button.onmouseenter = () => (button.style.filter = 'brightness(1.12)')
     button.onmouseleave = () => (button.style.filter = 'none')
@@ -163,10 +234,11 @@
           node.querySelector(
             "button[aria-pressed='true'],button[aria-label*='unreact'],button[aria-label='Reaction button state: Like']",
           ) !== null,
-        alreadyCommented:
-          node.querySelector(
-            "button[aria-label*='Moshe Schwartzberg’s comment'],button[aria-label*=\"Moshe Schwartzberg's comment\"]",
-          ) !== null,
+        alreadyCommented: hasOwnComment(node),
+        mediaUrls: [...node.querySelectorAll('img,video')]
+          .filter((element) => element.tagName === 'VIDEO' || element.naturalWidth >= 180)
+          .map((element) => element.currentSrc || element.src || element.poster || '')
+          .filter(Boolean).slice(0, 3),
       }))
       .map((item) => {
         const node = postNodes()[item.index]
@@ -241,25 +313,53 @@
       }
     }
     if (!action.comment) {
-      queueProfileConnection(action.authorUrl)
+      if (action.connect) await queueProfileConnection(action.authorUrl)
       return
     }
-    node.querySelector("button[aria-label*='Comment']")?.click()
-    await delay()
-    const editor = node.querySelector(
+    findControl(/^Comment(?:\s|$)/i, node)?.click()
+    await expandComments(node)
+    if (hasOwnComment(node)) {
+      status('Blank state - an existing comment by this account is already visible', 'blank')
+      return api('/result', 'POST', {
+        ok: false,
+        kind: 'comment',
+        reason: 'duplicate prevented: this account already commented on the post',
+      })
+    }
+    if (hasExactComment(node, action.comment)) {
+      status('Blank state - this exact comment is already posted', 'blank')
+      return api('/result', 'POST', {
+        ok: false,
+        kind: 'comment',
+        reason: 'duplicate prevented: exact comment is already visible',
+      })
+    }
+    const editor = await waitForVisible([
       "div[contenteditable='true'][role='textbox']",
-    )
+      'textarea.comments-comment-box-comment__text-editor',
+    ], 10000, node)
     if (!editor)
       return api('/result', 'POST', {
         ok: false,
         reason: 'comment editor not found',
       })
-    editor.focus()
-    document.execCommand('insertText', false, action.comment)
-    const before = node.querySelectorAll(
-      "button[aria-label*='Moshe Schwartzberg’s comment'],button[aria-label*=\"Moshe Schwartzberg's comment\"]",
-    ).length
+    if (!setEditorText(editor, action.comment))
+      return api('/result', 'POST', {
+        ok: false,
+        kind: 'comment',
+        reason: 'LinkedIn comment editor did not retain the draft text',
+      })
     if (!(await countdown('Comment'))) return
+    await expandComments(node)
+    if (hasExactComment(node, action.comment)) {
+      editor.textContent = ''
+      editor.dispatchEvent(new Event('input', {bubbles: true}))
+      return api('/result', 'POST', {
+        ok: false,
+        kind: 'comment',
+        reason: 'duplicate prevented during final pre-submit check',
+      })
+    }
     const submit =
       node.querySelector('button.comments-comment-box__submit-button') ||
       [...node.querySelectorAll('button')].find(
@@ -271,28 +371,17 @@
         reason: 'submit button unavailable',
       })
     submit.click()
-    for (let n = 0; n < 20; n++) {
-      await sleep(250)
-      const after = node.querySelectorAll(
-        "button[aria-label*='Moshe Schwartzberg’s comment'],button[aria-label*=\"Moshe Schwartzberg's comment\"]",
-      ).length
-      if (after > before || !node.contains(editor)) {
-        status('Running — comment submitted successfully')
-        await api('/result', 'POST', {
-          ok: true,
-          kind: 'comment',
-          reason: 'LinkedIn confirmed comment',
-        })
-        queueProfileConnection(action.authorUrl)
-        return
-      }
-    }
-    status('Comment submission could not be confirmed')
-    return api('/result', 'POST', {
-      ok: false,
+    const confirmation = await waitForExactComment(node, action.comment)
+    status(
+      confirmation.ok ? 'Running - exact comment confirmed' : 'Comment submission could not be confirmed',
+      confirmation.ok ? 'success' : 'failure',
+    )
+    await api('/result', 'POST', {
+      ok: confirmation.ok,
       kind: 'comment',
-      reason: 'LinkedIn did not confirm comment',
+      reason: confirmation.reason,
     })
+    if (confirmation.ok && action.connect) await queueProfileConnection(action.authorUrl)
   }
   async function queueProfileConnection(url) {
     if (!url || queuedProfiles.has(url)) return
@@ -356,7 +445,12 @@
         await finishProfileTask(task, 'retry', reason)
         return
       }
-      setEditorText(editor, response.data.message)
+      if (!setEditorText(editor, response.data.message)) {
+        const reason = 'Accepted-connection message editor did not retain the draft'
+        await api('/result', 'POST', {ok: false, kind: 'message', url: task.url, reason})
+        await finishProfileTask(task, 'retry', reason)
+        return
+      }
       if (!(await countdown('Non-pitch opener'))) return
       const messageRoot = editor.closest("[role='dialog'],form,.msg-form") || document
       const sendMessage = findControl(/^Send$/i, messageRoot)
@@ -367,7 +461,7 @@
         return
       }
       sendMessage.click()
-      const confirmed = await waitForEditorClear(editor)
+      const confirmed = await waitForExactOutgoingMessage(response.data.message)
       await api('/result', 'POST', {
         ok: confirmed,
         kind: confirmed ? 'message' : undefined,
@@ -412,8 +506,11 @@
     if (!connect) {
       const more = findControl(/^More$|More actions/i, profileRoot)
       more?.click()
-      await sleep(800)
-      connect = findConnectControl()
+      const deadline = Date.now() + 5000
+      while (!connect && Date.now() < deadline) {
+        connect = findConnectControl()
+        if (!connect) await sleep(250)
+      }
     }
     if (!connect) {
       await api('/result', 'POST', {
@@ -425,7 +522,7 @@
       return
     }
     connect.click()
-    const dialog = await waitForVisible(["div[role='dialog']"], 6000)
+    let dialog = await waitForVisible(["div[role='dialog']"], 6000)
     if (!dialog) {
       const confirmation = await waitForConnectionConfirmation(null, 4000)
       await api('/result', 'POST', {
@@ -443,23 +540,36 @@
     }
     const addNote = findControl(/^Add a note$|Personalize invitation/i, dialog)
     addNote?.click()
-    if (addNote) await sleep(500)
+    if (addNote) {
+      await sleep(800)
+      dialog = [...document.querySelectorAll("div[role='dialog']")].filter(visible).at(-1) || dialog
+    }
     const input = await waitForVisible([
       'textarea',
       "div[contenteditable='true'][role='textbox']",
       "input[name='message']",
     ], 5000, dialog)
     if (addNote && !input) {
-      const reason = 'Connection note editor did not appear'
-      await api('/result', 'POST', { ok: false, kind: 'connection', reason })
-      await finishProfileTask(task, 'retry', reason)
-      return
+      dialog = [...document.querySelectorAll("div[role='dialog']")].filter(visible).at(-1) || dialog
+      const sendWithoutNote = findControl(/^Send without a note$/i, dialog)
+      if (!sendWithoutNote) {
+        const reason = `Connection note editor did not appear; controls=${controlDiagnostics(dialog)}`
+        await api('/result', 'POST', { ok: false, kind: 'connection', reason })
+        await finishProfileTask(task, 'retry', reason)
+        return
+      }
     }
     if (input) {
       const note = response.data.message.slice(0, 300)
-      setEditorText(input, note)
+      if (!setEditorText(input, note)) {
+        const reason = 'Connection note editor did not retain the draft'
+        await api('/result', 'POST', {ok: false, kind: 'connection', reason})
+        await finishProfileTask(task, 'retry', reason)
+        return
+      }
     }
     if (!(await countdown('Connection request'))) return
+    dialog = [...document.querySelectorAll("div[role='dialog']")].filter(visible).at(-1) || dialog
     const send = findControl(/^(Send|Send invitation|Send now|Send without a note)$/i, dialog)
     if (!send || send.disabled) {
       await api('/result', 'POST', {
@@ -495,7 +605,8 @@
     })
   }
   async function handleNotificationsPage() {
-    status('Daily follow-up - scanning notification replies', 'loading')
+    const priorityScan = new URLSearchParams(location.search).has('cc_priority')
+    status(priorityScan ? 'Priority alert - scanning new notifications' : 'Daily follow-up - scanning notification replies', 'loading')
     await sleep(2500)
     const candidates = []
     const seen = new Set()
@@ -506,12 +617,12 @@
     ].filter(visible)
     for (const node of nodes) {
       const notificationText = (node.innerText || '').replace(/\s+/g, ' ').trim()
-      if (!/(?:replied|responded) to your comment/i.test(notificationText)) continue
+      if (!/(?:(?:replied|responded) to your (?:comment|reply)|mentioned you in a comment|commented on your (?:post|activity)|commented on a post you)/i.test(notificationText)) continue
       const link = [...node.querySelectorAll('a[href]')].find((anchor) =>
         /\/feed\/update\/|\/posts\/|commentUrn=/i.test(anchor.href),
       )
       if (!link) continue
-      const id = node.getAttribute('data-urn') || `${link.href}|${notificationText.slice(0, 300)}`
+      const id = `${link.href}|${notificationText.slice(0, 600)}`
       if (seen.has(id)) continue
       seen.add(id)
       candidates.push({ id, url: link.href, notificationText: notificationText.slice(0, 1200) })
@@ -525,28 +636,54 @@
       status('Daily follow-up - no new comment replies', 'blank')
     }
     await sleep(800)
-    await chrome.runtime.sendMessage({ type: 'closeAutomationTab' })
+    await chrome.runtime.sendMessage({
+      type: priorityScan ? 'finishLinkedInPriorityScan' : 'closeAutomationTab',
+    })
+  }
+
+  async function checkNotificationPriority() {
+    if (priorityRequested || location.pathname.startsWith('/notifications')) return
+    const notificationLink = [...document.querySelectorAll("a[href*='/notifications']")]
+      .filter(visible)
+      .find((link) => {
+        const content = `${label(link)} ${link.innerText || ''}`
+        const badge = link.querySelector(
+          "[data-test-icon*='notification'],.notification-badge,[aria-label*='new notification' i]",
+        )
+        return Boolean(badge || /\b[1-9]\d*\s+(?:new\s+)?notifications?\b/i.test(content))
+      })
+    if (!notificationLink) return
+    priorityRequested = true
+    const response = await chrome.runtime.sendMessage({type: 'triggerLinkedInPriority'})
+    if (!response?.ok) priorityRequested = false
   }
   async function handleNotificationReply(task) {
     status('Daily follow-up - opening a reply thread', 'loading')
-    await delay()
+    await waitForVisible(['main'], 15000)
+    await sleep(1800)
     const normalized = (task.notificationText || '').replace(/\s+/g, ' ').trim()
-    const actor = normalized.match(/^(.{1,100}?)\s+(?:replied|responded) to/i)?.[1]?.trim()
-    const commentRoots = [
-      ...document.querySelectorAll(
-        ".comments-comment-item,[data-view-name='comment-item'],[data-urn*='comment']",
-      ),
-    ].filter(visible)
-    const highlighted = commentRoots.find((root) =>
+      .replace(/^Unread notification\.\s*/i, '')
+    const actor = normalized.match(/^(.{1,100}?)\s+(?:replied|responded|mentioned|commented)/i)?.[1]?.trim()
+    if (!commentRoots(document).length) {
+      findControl(/^Comment(?:\s|$)|Show comments/i)?.click()
+      await waitForVisible([
+        '.comments-comment-item',
+        "[data-view-name='comment-item']",
+        "[data-urn*='comment']",
+      ], 12000)
+    }
+    await expandComments(document)
+    const threadComments = commentRoots(document)
+    const highlighted = threadComments.find((root) =>
       root.matches(".comments-comment-item--highlighted,[data-highlighted='true']") &&
       findControl(/^Reply$/i, root),
     )
-    const target = highlighted || (actor
-      ? commentRoots.find((root) =>
+    const target = (actor
+      ? [...threadComments].reverse().find((root) =>
           (root.innerText || '').toLowerCase().includes(actor.toLowerCase()) &&
           findControl(/^Reply$/i, root),
         )
-      : null)
+      : null) || highlighted || [...threadComments].reverse().find((root) => findControl(/^Reply$/i, root))
     const replyButton = target ? findControl(/^Reply$/i, target) : null
     if (!target || !replyButton) {
       const reason = `Could not safely identify the replied-to comment; actor=${actor || 'unknown'}`
@@ -557,13 +694,17 @@
     const response = await api('/draft-notification-reply', 'POST', {
       notificationId: task.id,
       notificationText: task.notificationText,
-      context: (document.querySelector('main')?.innerText || '').slice(0, 5000),
+      context: (document.querySelector('main')?.innerText || '').slice(-10000),
     })
     if (!response?.ok || !response.data.allowed || !response.data.reply) {
       const reason = `Notification reply skipped: ${response?.data?.reason || 'draft failed'}`
       await api('/result', 'POST', { ok: false, reason })
       await finishNotificationTask(task, 'done', reason)
       return
+    }
+    if (hasExactComment(document, response.data.reply)) {
+      await finishNotificationTask(task, 'done', 'duplicate reply already visible')
+      return status('Blank state - this reply is already posted', 'blank')
     }
     replyButton.click()
     const editor = await waitForVisible([
@@ -579,8 +720,18 @@
       await finishNotificationTask(task, 'retry', reason)
       return
     }
-    setEditorText(editor, response.data.reply)
+    if (!setEditorText(editor, response.data.reply)) {
+      const reason = 'Notification reply editor did not retain the draft text'
+      await api('/result', 'POST', {ok: false, reason})
+      await finishNotificationTask(task, 'retry', reason)
+      return
+    }
     if (!(await countdown('Comment reply'))) return
+    await expandComments(document)
+    if (hasExactComment(document, response.data.reply)) {
+      await finishNotificationTask(task, 'done', 'duplicate reply appeared before submit')
+      return status('Blank state - duplicate notification reply prevented', 'blank')
+    }
     const replyRoot = editor.closest('form') || target
     const submit = findControl(/^(Reply|Comment|Send)$/i, replyRoot)
     if (!submit || submit.disabled) {
@@ -590,26 +741,86 @@
       return
     }
     submit.click()
-    const confirmed = await waitForEditorClear(editor)
+    const confirmation = await waitForExactComment(document, response.data.reply)
     await api('/result', 'POST', {
-      ok: confirmed,
-      kind: confirmed ? 'notification_reply' : undefined,
+      ok: confirmation.ok,
+      kind: confirmation.ok ? 'notification_reply' : undefined,
       notificationId: task.id,
-      reason: confirmed
-        ? 'LinkedIn confirmed notification comment reply'
-        : 'LinkedIn did not confirm notification comment reply',
+      reason: confirmation.reason,
     })
     status(
-      confirmed ? 'Comment reply confirmed' : 'Comment reply was not confirmed',
-      confirmed ? 'success' : 'failure',
+      confirmation.ok ? 'Comment reply confirmed' : 'Comment reply was not confirmed',
+      confirmation.ok ? 'success' : 'failure',
     )
     await finishNotificationTask(
       task,
-      confirmed ? 'done' : 'retry',
-      confirmed ? '' : 'reply submission was not confirmed',
+      confirmation.ok ? 'done' : 'retry',
+      confirmation.ok ? '' : confirmation.reason,
     )
   }
-  async function maybeRunDailyFollowups() {
+
+  async function handleIncomingInvitations() {
+    status('Loading incoming invitations', 'loading')
+    await waitForVisible(['main'], 12000)
+    const accepts = controls(document).filter((control) =>
+      /^(Accept(?:\s|$)|Accept .+ invitation)/i.test(label(control)),
+    )
+    if (!accepts.length) {
+      status('Blank state - no incoming invitations', 'blank')
+      if (new URLSearchParams(location.search).has('cc_auto_invites'))
+        await chrome.runtime.sendMessage({type: 'closeAutomationTab'})
+      return
+    }
+    for (const accept of accepts) {
+      if (!visible(accept)) continue
+      const card = accept.closest('li,article,[role=listitem]') || accept.parentElement
+      const invitationLabel = label(accept)
+      const acceptsBefore = controls(document).filter((control) =>
+        /^(Accept(?:\s|$)|Accept .+ invitation)/i.test(label(control)),
+      ).length
+      const name = invitationLabel.match(/^Accept\s+(.+?)(?:[’']s)?\s+invitation/i)?.[1] ||
+        normalizeText(card?.innerText).replace(/\s+wants to connect.*$/i, '')
+      card?.scrollIntoView({block: 'center'})
+      if (!(await countdown(`Accept ${name || 'invitation'}`))) return
+      if (!visible(accept) || !document.contains(accept)) continue
+      accept.click()
+      const deadline = Date.now() + 12000
+      let confirmed = false
+      let reason = 'LinkedIn did not confirm the invitation acceptance'
+      while (Date.now() < deadline) {
+        const feedback = feedbackText()
+        if (/invitation accepted|you are now connected|connection accepted/i.test(feedback)) {
+          confirmed = true
+          reason = `LinkedIn confirmed invitation accepted${name ? ` for ${name}` : ''}`
+          break
+        }
+        const sameInvitation = controls(document).some((control) => label(control) === invitationLabel)
+        const acceptsAfter = controls(document).filter((control) =>
+          /^(Accept(?:\s|$)|Accept .+ invitation)/i.test(label(control)),
+        ).length
+        if (!sameInvitation && acceptsAfter < acceptsBefore) {
+          confirmed = true
+          reason = `LinkedIn removed the accepted invitation${name ? ` for ${name}` : ''}`
+          break
+        }
+        const blocked = blockingFeedback()
+        if (blocked) { reason = blocked; break }
+        await sleep(300)
+      }
+      await api('/result', 'POST', {
+        ok: confirmed,
+        kind: confirmed ? 'connection_accept' : undefined,
+        reason,
+      })
+      status(confirmed ? `Success - accepted ${name}` : `Failure - ${reason}`, confirmed ? 'success' : 'failure')
+      if (!confirmed) break
+      await sleep(1000)
+    }
+    if (new URLSearchParams(location.search).has('cc_auto_invites'))
+      await chrome.runtime.sendMessage({type: 'closeAutomationTab'})
+  }
+  async function maybeRunDailyFollowups(config) {
+    if (!config.notificationReplies && !config.messages && !config.incomingInvites) return
     const now = new Date()
     const localDay = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'),
       String(now.getDate()).padStart(2, '0')].join('-')
@@ -619,14 +830,17 @@
     dailyFollowupCheckedDay = localDay
     if (!response.data.due) return
     const pendingConnections = response.data.pendingConnections || []
-    if (pendingConnections.length) {
+    if (config.messages && pendingConnections.length) {
       await chrome.runtime.sendMessage({
         type: 'openProfiles',
         mode: 'acceptedCheck',
         urls: pendingConnections,
       })
     }
-    await chrome.runtime.sendMessage({ type: 'openDailyNotifications' })
+    if (config.notificationReplies)
+      await chrome.runtime.sendMessage({ type: 'openDailyNotifications' })
+    if (config.incomingInvites)
+      await chrome.runtime.sendMessage({ type: 'openIncomingInvitations' })
     status(
       `Daily follow-up started - ${pendingConnections.length} pending connections to check`,
     )
@@ -636,10 +850,20 @@
     if (busy || paused || !location.pathname.startsWith('/feed')) return
     busy = true
     try {
+      const settings = await CodeCrafterSettings.load()
+      const config = settings.platforms.linkedin
+      if (!config.enabled) return status('Blank state - LinkedIn automation disabled', 'blank')
       const foundPosts = posts()
-      await maybeRunDailyFollowups()
+      await maybeRunDailyFollowups(config)
       const response = await api('/cycle', 'POST', {
         posts: foundPosts,
+        topics: config.topics,
+        features: {
+          likes: config.likes,
+          comments: config.comments,
+          connections: config.connections,
+          imageRecognition: config.imageRecognition,
+        },
         diagnostics: {
           extensionVersion: EXTENSION_VERSION,
           extensionBuild: EXTENSION_BUILD,
@@ -676,13 +900,31 @@
     }
   }
   async function start() {
+    if (location.pathname.startsWith('/messaging')) return
     panel()
+    const settings = await CodeCrafterSettings.load()
+    if (!settings.platforms.linkedin.enabled)
+      return status('Blank state - LinkedIn automation disabled', 'blank')
     const notificationTask = await chrome.runtime.sendMessage({ type: 'getNotificationTask' })
-    if (notificationTask?.task) return handleNotificationReply(notificationTask.task)
-    if (location.pathname.startsWith('/notifications')) return handleNotificationsPage()
+    if (notificationTask?.task && settings.platforms.linkedin.notificationReplies)
+      return handleNotificationReply(notificationTask.task)
+    if (location.pathname.startsWith('/notifications')) {
+      if (!settings.platforms.linkedin.notificationReplies)
+        return status('Blank state - notification replies disabled', 'blank')
+      return handleNotificationsPage()
+    }
+    if (location.pathname.startsWith('/mynetwork/invitation-manager/received')) {
+      if (!settings.platforms.linkedin.incomingInvites)
+        return status('Blank state - incoming invitation acceptance disabled', 'blank')
+      return handleIncomingInvitations()
+    }
     if (location.pathname.startsWith('/in/')) return handleProfileConnection()
     if (location.pathname.startsWith('/feed')) {
       setInterval(cycle, 12000)
+      if (settings.platforms.linkedin.notificationInterrupts) {
+        setInterval(checkNotificationPriority, 3000)
+        checkNotificationPriority()
+      }
       cycle()
     }
   }

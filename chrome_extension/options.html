@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CodeCrafter Social Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">CodeCrafter Social Bridge</p><h1>Automation settings</h1></div>
+      <span id="version"></span>
+    </header>
+    <section id="status" data-phase="loading" aria-live="polite">
+      <span>Loading your settings…</span><i></i>
+    </section>
+    <section class="style-card display-card" aria-labelledby="display-title">
+      <div><p class="site-label">Page controls</p><h2 id="display-title">Automation popup</h2><p>Keep the status popup compact or hide it entirely while automation continues in background tabs.</p></div>
+      <div class="features">
+        <label class="feature switch"><input id="show-overlay" type="checkbox"><span></span><em>Show status popup</em></label>
+        <label class="feature switch"><input id="compact-overlay" type="checkbox"><span></span><em>Use compact popup</em></label>
+      </div>
+    </section>
+    <section class="style-card" aria-labelledby="style-title">
+      <div>
+        <p class="site-label">Reply voice</p>
+        <h2 id="style-title">Writing style</h2>
+        <p>Paste an LLM summary of your style or a few paragraphs you wrote. It stays in local extension storage.</p>
+      </div>
+      <label class="style-source">Source
+        <select id="style-source">
+          <option value="summary">LLM style summary</option>
+          <option value="samples">My writing samples</option>
+        </select>
+      </label>
+      <textarea id="style-content" rows="8" maxlength="20000" placeholder="Paste the style summary or writing samples here"></textarea>
+      <div class="style-actions">
+        <label class="file-button" for="style-file" tabindex="0">Import text file</label>
+        <input id="style-file" type="file" accept=".txt,.md,text/plain,text/markdown">
+        <span id="style-count">0 / 20,000</span>
+      </div>
+    </section>
+    <section class="style-card safeguard-card" aria-labelledby="safeguard-title">
+      <div>
+        <p class="site-label">Deterministic reply rules</p>
+        <h2 id="safeguard-title">Important information and safeguards</h2>
+        <p>Business facts may be used in replies. Contact and group rules are enforced before the AI can draft or send.</p>
+      </div>
+      <label class="style-source">Verified company information
+        <textarea id="business-facts" rows="8" maxlength="30000" placeholder="Example: Opening hours: Sundayâ€“Thursday, 09:00â€“17:00. Friday and Saturday: closed."></textarea>
+      </label>
+      <span id="facts-count">0 / 30,000</span>
+      <div class="safeguard-grid">
+        <label class="style-source">Conversation type
+          <select id="conversation-scope">
+            <option value="all">Direct messages and groups</option>
+            <option value="direct">Direct messages only</option>
+            <option value="groups">Groups only</option>
+          </select>
+        </label>
+        <label class="style-source">Contact policy
+          <select id="contact-mode">
+            <option value="all">Everyone except blocked contacts</option>
+            <option value="allowlist">Only allowed contacts</option>
+          </select>
+        </label>
+      </div>
+      <div class="safeguard-grid">
+        <label class="style-source">Allowed contacts â€” one exact name per line
+          <textarea id="allowed-contacts" rows="6" placeholder="Important Client&#10;Family Group"></textarea>
+        </label>
+        <label class="style-source">Never answer â€” one exact name per line
+          <textarea id="blocked-contacts" rows="6" placeholder="Do Not Reply Contact"></textarea>
+        </label>
+      </div>
+      <p class="policy-note">Blocked contacts always take priority over every other setting.</p>
+    </section>
+    <section id="platforms" aria-busy="true"></section>
+    <footer>
+      <button id="open-dashboard" class="secondary">Open statistics dashboard</button>
+      <button id="run-messages" class="secondary">Run enabled inbox replies now</button>
+      <button id="save" class="primary">Save settings</button>
+    </footer>
+  </main>
+  <template id="platform-template">
+    <article class="platform-card">
+      <div class="card-head"><div><p class="site-label"></p><h2></h2></div><label class="switch master"><input type="checkbox"><span></span><em>Enabled</em></label></div>
+      <div class="features"></div>
+      <div class="topics"><div><h3>Topics</h3><p>Empty means all topics. Add, edit, or remove terms at any time.</p></div><div class="topic-list"></div><div class="topic-entry"><input type="text" placeholder="e.g. hightech, HR"><button type="button">Add topic</button></div></div>
+    </article>
+  </template>
+  <script src="settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

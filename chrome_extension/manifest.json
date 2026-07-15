@@ -1,19 +1,29 @@
 {
   "manifest_version": 3,
   "name": "CodeCrafter Social Bridge",
-  "version": "3.7.0",
-  "description": "Connects the local Ollama engagement bot to signed-in LinkedIn and Instagram tabs.",
+  "version": "3.15.2",
+  "description": "Configurable local engagement automation for LinkedIn, Instagram, Facebook, and WhatsApp Web.",
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "alarms"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://www.instagram.com/*",
+    "https://www.facebook.com/*",
+    "https://web.whatsapp.com/*",
     "http://127.0.0.1:8765/*"
   ],
   "background": {
     "service_worker": "service_worker.js"
+  },
+  "action": {
+    "default_title": "Open CodeCrafter Social settings"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {
@@ -21,6 +31,7 @@
         "https://www.linkedin.com/*"
       ],
       "js": [
+        "settings.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -30,7 +41,41 @@
         "https://www.instagram.com/*"
       ],
       "js": [
+        "settings.js",
         "instagram_content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.facebook.com/*"
+      ],
+      "js": [
+        "settings.js",
+        "facebook_content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/*",
+        "https://www.instagram.com/*",
+        "https://www.facebook.com/*"
+      ],
+      "js": [
+        "settings.js",
+        "inbox_content.js",
+        "metrics_content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "settings.js",
+        "whatsapp_content.js"
       ],
       "run_at": "document_idle"
     }

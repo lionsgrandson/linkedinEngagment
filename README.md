@@ -1,7 +1,7 @@
-# LinkedIn and Instagram Engagement Copilot
+# LinkedIn, Instagram, and Facebook Engagement Copilot
 
-A local Python copilot that reads the LinkedIn feed visible in your own Chrome session and uses
-Ollama for relevance decisions, comment drafting, comment review, and connection-note drafting.
+A local Python copilot and Chrome extension for configurable LinkedIn, Instagram, and Facebook
+engagement in your already signed-in browser sessions.
 
 This tool runs without terminal confirmations while remaining observable in the signed-in browser.
 Every comment and connection request gets a visible 10-second pre-submit countdown. The browser panel can
@@ -17,6 +17,8 @@ pause/resume the bot at any time, and the STOP kill switch still shuts it down c
 - Always-visible Pause/Resume button; paused time does not consume delays or countdowns.
 - Random 5–10 second delay before LinkedIn actions.
 - Daily interaction limits are persisted in `state.json`.
+- Click the extension icon to open one settings page containing master switches, per-feature
+  toggles, and editable topic lists for LinkedIn, Instagram, and Facebook.
 - Controls the already-open, normally signed-in Chrome through a local extension.
 - Logs actions, decisions, rejected drafts, and errors to `linkedin_bot.log`.
 - Separate Pause/Resume control plus STOP-file and Ctrl+C kill switches.
@@ -29,7 +31,8 @@ pause/resume the bot at any time, and the STOP kill switch still shuts it down c
   profile and create a profile-based connection note with the same pauseable 10-second countdown.
 - Once per day, the app opens an inactive Notifications tab, queues previously unanswered replies
   to Moshe's comments, drafts a thread-grounded response, reviews it, and submits it through the
-  same pauseable countdown. Confirmed notification IDs are retained to prevent duplicate answers.
+  same pauseable countdown. Each new reply gets a text fingerprint, so later responses in the same
+  thread continue the full conversation without resending an answer to the same notification.
 - During the same daily batch, sent connection profiles are checked for acceptance. When LinkedIn
   exposes the Message action and no Pending/Connect action remains, Ollama drafts and reviews a
   profile-grounded non-pitch opener. The message counts only after the editor clears after Send.
@@ -40,10 +43,30 @@ pause/resume the bot at any time, and the STOP kill switch still shuts it down c
 - Every LinkedIn post rejected by relevance scoring is appended to `skipped_post_topics.txt` with
   the detected topics, configured-topic matches, score, reason, and excerpt. This makes it easy to
   decide which new topics belong in `linkedin_strategy.json`.
-- Instagram likes visible feed, Explore, post, and Reel items without reading their content. After
+- Instagram likes visible feed, Explore, post, and Reel items. Visible text and optional local
+  multimodal recognition can narrow activity to configured non-sensitive topics. After
   every 100 confirmed likes it watches the available story sequence to the end, then resumes liking.
-  Instagram never
-  comments, follows accounts, sends messages, captures screenshots, or runs OCR.
+  Instagram never posts feed comments. Matching-account follows and inbox replies have separate
+  opt-in toggles and configurable daily limits.
+- Facebook can like and draft/review comments on matching visible posts. Both actions have separate
+  toggles and count only after the browser confirms the result.
+- On a specific Instagram or Facebook profile, profile-batch mode likes the configured X newest
+  posts, scrolls to the bottom of the loaded profile, then likes another X older posts.
+- Inbox answering is disabled by default. When enabled per site, the service worker opens a new
+  LinkedIn, Instagram, or Facebook inbox tab once daily, answers unread conversations it can safely
+  identify, and closes automation tabs when no unread conversations remain.
+- WhatsApp replies run only on `https://web.whatsapp.com/`. The extension opens a dedicated
+  WhatsApp Web tab, responds only when the newest visible turn is inbound, confirms the send, and
+  closes its automation tab after replying.
+- WhatsApp client names can be added to the Automatic clients list for immediate replies. Clients
+  not listed there still receive a reply, but only after the visible 10-second cancellation timer.
+- The Options page accepts either an LLM-written style summary or plain-text writing samples. The
+  locally stored text controls tone only and is never treated as facts, promises, or instructions.
+- The Options page also stores verified company information and deterministic inbox safeguards:
+  direct messages and groups, direct-only, groups-only, everyone-except-blocked, or exact allowlist.
+  Exact blocked contacts always take priority and are rejected before Ollama is called.
+- LinkedIn notification interruption is off by default so normal browsing is never redirected.
+  It can be enabled explicitly in Options after notification replying is verified on the account.
 
 The program does not self-modify or install capabilities autonomously. When a capability is
 missing, it logs the error and stops safely so the code can be reviewed before changes are made.
@@ -60,7 +83,7 @@ missing, it logs the error and stops safely so the code can be reviewed before c
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -e .
 ollama pull llama3.1:8b
 ```
 
@@ -114,6 +137,17 @@ python linkedin_bot.py
 Chrome may remain open before, during, and after the bot runs. Open the LinkedIn feed in any tab
 where you are already signed in; the extension connects that tab to Python automatically.
 
+For normal use you do not need to keep a terminal open. Install the Windows logon task once:
+
+```powershell
+python manage.py install-bridge-task
+```
+
+It starts the local bridge and Ollama in hidden windows after Windows sign-in. Automation tabs are
+opened in the background, so the rest of Chrome and the computer remain available. Avoid manually
+editing or closing a tab at the exact moment that tab is submitting an action; other tabs and apps
+can be used normally.
+
 To use another installed Ollama model:
 
 ```powershell
@@ -164,20 +198,103 @@ Pending LinkedIn connection checks are preserved:
 Stop the bot before resetting if it is running, then start it again so no in-flight browser action
 immediately increments a freshly reset counter.
 
+## Social and Google Analytics reports
+
+Generate one HTML and one JSON report with day, 7-day, 30-day, and 365-day windows:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py report
+```
+
+The files are written to `reports\latest.html` and `reports\latest.json`. Confirmed browser actions
+come from `linkedin_metrics.jsonl`. Organic account totals such as received likes, comments,
+followers, connections, messages, and views are stored separately in `account_metrics.jsonl` so
+they are never confused with actions performed by the bot.
+
+With the bridge running, the current dashboard is available at
+`http://127.0.0.1:8765/dashboard`. The extension settings page also has an **Open statistics
+dashboard** button. The dashboard regenerates when opened.
+
+When a LinkedIn profile/dashboard, Instagram profile, or Facebook profile/page exposes clearly
+labeled account totals, the extension records them automatically. It intentionally does not sum
+numbers from feed posts. Metrics that the site does not expose on the current page stay blank.
+
+The configured GA4 properties are `251729349` for `code-site.tech` and `258133186` for
+`mosheschwartzberg.com`. For unattended collection, create a Google service account, grant its
+email Viewer access to both GA4 properties, and set `GOOGLE_APPLICATION_CREDENTIALS` to the JSON
+credential path. Then run:
+
+```powershell
+.\.venv\Scripts\python.exe manage.py collect-ga4 --days 365
+.\.venv\Scripts\python.exe manage.py install-report-task --time 23:55
+```
+
+The scheduled job refreshes GA4 when credentials are available and always rebuilds the report.
+Its correlation section requires at least three dates that have both a social account snapshot and
+website traffic; correlation is descriptive and does not prove that social activity caused visits.
+
 ## Instagram mode
 
 Sign in to `https://www.instagram.com/` in the same normal Chrome profile. The extension likes each
-new visible feed, Explore, post, or Reel item and immediately moves on. It does not inspect captions,
-generate text, comment, follow, message, capture screenshots, or use OCR/Ollama for Instagram.
+new visible feed, Explore, post, or Reel item and immediately moves on. It never generates feed
+comments. When topics are configured, visible text is checked first and the local Qwen vision model
+can classify attached images for non-sensitive topics such as AI, HR, recruiting, or technology.
+Appearance-based gender, race, religion, disability, and ethnicity inference is rejected.
 
 Instagram likes have no daily limit. A persistent counter survives day changes and restarts. When
-it reaches `story_interval_likes` (100 by default), the extension opens Stories, leaves each story
-visible for four seconds, advances until no Next control remains, resets the counter, and resumes
-normal post/reel liking. The panel provides loading, success, failure, blank, and filled states;
+it reaches `story_interval_likes` (100 by default), the extension scrolls to the top, opens Stories,
+leaves videos visible for their remaining duration (and images for their display interval), advances
+until no Next control remains, refreshes the page, resets the counter, and resumes normal post/reel
+liking. The panel provides loading, success, failure, blank, and filled states;
 its Pause/Resume button has a hover state and pauses both likes and story advancement.
+If Stories cannot be found or do not actually open, the 100-like trigger remains pending and the
+page is not refreshed.
 
 Instagram changes its HTML frequently. Likes count only after the Like control changes to Unlike.
 Story views count only after the story has remained visible for the viewing interval.
+
+## Settings, topics, and feature toggles
+
+Click the CodeCrafter Social Bridge extension icon or use **Extension details → Extension options**.
+Each website has a master switch plus independent toggles for its supported features:
+
+- LinkedIn: likes, comments, connections, notification replies, and inbox messages.
+- Instagram: feed likes, Stories, matching-account follows, visual topic recognition, profile-batch
+  likes, and inbox messages. Instagram feed comments remain unavailable.
+- Facebook: feed likes, feed comments, matching-account follows, visual topic recognition,
+  profile-batch likes, and inbox messages.
+
+For Instagram and Facebook, set **Posts per profile section (X)** from 1 to 100. When profile-batch
+likes are enabled and you open a specific profile, the extension likes X posts from the top, loads
+until page height is stable and no loading indicator remains, then likes another X posts there and
+returns to the website home page. The same settings page controls daily follows (20 by default),
+daily likes (`0` means unlimited), likes between Instagram story batches, and stories per batch
+(`0` means watch all available stories).
+
+Each site also has an editable topic list. Add topics such as `hightech` and `HR`, remove topics with
+the chip × button, and save. An empty topic list allows every visible topic. LinkedIn passes the
+saved list into its Ollama relevance analysis; Instagram and Facebook use direct visible-text
+matching without OCR. Settings are stored in Chrome and take effect without editing JSON files.
+Visual recognition runs locally through `qwen3.5:9b`; it does not classify protected traits from
+appearance. Explicit self-description text can still be matched like any other configured text topic.
+
+All inbox-message toggles default to off so a real conversation is never answered before setup.
+Enable the sites you want and either wait for the automatic run or click **Run enabled inbox replies now**. Every
+drafted reply receives a safety review and a visible 10-second pre-submit countdown. The writing
+style card accepts pasted text or a `.txt`/`.md` import.
+
+Use **Important information and safeguards** for facts the bot is allowed to state, for example:
+
+```text
+Opening hours: Sunday-Thursday, 09:00-17:00.
+Friday and Saturday: closed.
+Support email: help@example.com.
+```
+
+Choose **Groups only** to reject every direct message, or **Direct messages only** to reject group
+conversations. Choose **Only allowed contacts** for an exact-name allowlist. Add any contact under
+**Never answer** to block it regardless of the other settings. If the extension cannot identify a
+contact while allowlist mode is active, it refuses the reply rather than guessing.
 
 Optional pre-submit countdown override (the default is 10 seconds):
 

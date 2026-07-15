@@ -4,11 +4,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from reporting import record_snapshot, write_report
 
 
 def run_server(bot) -> None:
     extension_status = {"seen": False}
+    result_lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -22,14 +26,37 @@ def run_server(bot) -> None:
             self.send_header("Content-Length", str(len(body)))
             self.end_headers(); self.wfile.write(body)
 
+        def reply_html(self, body, status=200):
+            encoded = body.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers(); self.wfile.write(encoded)
+
         def do_GET(self):
             if self.path == "/extension-status":
                 return self.reply(extension_status)
+            if self.path in {"/dashboard", "/dashboard/"}:
+                return self.reply_html(write_report(bot.ROOT)[1].read_text(encoding="utf-8"))
+            if self.path == "/report":
+                return self.reply(write_report(bot.ROOT)[2])
             self.reply({"ok": True, "version": bot.APP_VERSION})
 
         def do_POST(self):
             size = int(self.headers.get("Content-Length", "0"))
             data = json.loads(self.rfile.read(size) or b"{}")
+            if self.path == "/account-snapshot":
+                source = str(data.get("source", ""))
+                metrics = data.get("metrics")
+                allowed = {"linkedin", "facebook", "instagram",
+                           "ga4:mosheschwartzberg.com", "ga4:code-site.tech"}
+                if source not in allowed or not isinstance(metrics, dict):
+                    return self.reply({"error": "invalid snapshot source or metrics"}, 400)
+                numeric = {str(key): value for key, value in metrics.items()
+                           if isinstance(value, (int, float)) and not isinstance(value, bool)}
+                return self.reply({"received": True, "snapshot": record_snapshot(
+                    bot.ROOT, source, numeric, data.get("captured_at"))})
             if self.path == "/extension-heartbeat":
                 site = data.get("site", "unknown")
                 status = {
@@ -47,32 +74,41 @@ def run_server(bot) -> None:
             if self.path == "/result":
                 level = logging.INFO if data.get("ok") else logging.ERROR
                 logging.log(level, "Browser action result: ok=%s reason=%s", data.get("ok"), data.get("reason"))
-                supported = {"like", "comment", "message", "connection", "notification_reply",
-                             "instagram_like", "instagram_story_view"}
+                supported = {"like", "comment", "message", "connection", "connection_accept", "notification_reply",
+                             "instagram_like", "instagram_story_view", "facebook_like",
+                             "instagram_follow", "facebook_comment", "facebook_follow",
+                             "inbox_reply"}
                 if data.get("ok") and data.get("kind") in supported:
-                    state = bot.load_state()
-                    counter = {"like": "likes", "comment": "comments",
-                               "message": "messages", "connection": "connections",
-                               "notification_reply": "notification_replies",
-                               "instagram_like": "instagram_likes",
-                               "instagram_story_view": "instagram_story_views"}[data["kind"]]
-                    state[counter] += 1
-                    if data["kind"] == "instagram_like":
-                        state["instagram_likes_since_stories"] += 1
-                    url = data.get("url", "")
-                    if data["kind"] == "connection" and url:
-                        state["pending_connections"] = [p for p in state["pending_connections"] if p.get("url") != url]
-                        state["pending_connections"].append({"url": url, "last_checked": ""})
-                    elif data["kind"] == "message" and url:
-                        state["pending_connections"] = [p for p in state["pending_connections"] if p.get("url") != url]
-                    elif data["kind"] == "notification_reply":
-                        notification_id = data.get("notificationId", "")
-                        if notification_id and notification_id not in state["replied_notification_ids"]:
-                            state["replied_notification_ids"].append(notification_id)
-                            state["replied_notification_ids"] = state["replied_notification_ids"][-1000:]
-                    bot.save_state(state)
-                    bot.record_metric(f"confirmed_{data['kind']}", count=state[counter])
-                    logging.info("Confirmed daily counter updated: %s=%s", counter, state[counter])
+                    with result_lock:
+                        state = bot.load_state()
+                        counter = {"like": "likes", "comment": "comments",
+                                   "message": "messages", "connection": "connections",
+                                   "connection_accept": "connections_accepted",
+                                   "notification_reply": "notification_replies",
+                                   "instagram_like": "instagram_likes",
+                                   "instagram_story_view": "instagram_story_views",
+                                   "instagram_follow": "instagram_follows",
+                                   "facebook_like": "facebook_likes",
+                                   "facebook_comment": "facebook_comments",
+                                   "facebook_follow": "facebook_follows",
+                                   "inbox_reply": "inbox_replies"}[data["kind"]]
+                        state[counter] += 1
+                        if data["kind"] == "instagram_like":
+                            state["instagram_likes_since_stories"] += 1
+                        url = data.get("url", "")
+                        if data["kind"] == "connection" and url:
+                            state["pending_connections"] = [p for p in state["pending_connections"] if p.get("url") != url]
+                            state["pending_connections"].append({"url": url, "last_checked": ""})
+                        elif data["kind"] == "message" and url:
+                            state["pending_connections"] = [p for p in state["pending_connections"] if p.get("url") != url]
+                        elif data["kind"] == "notification_reply":
+                            notification_id = data.get("notificationId", "")
+                            if notification_id and notification_id not in state["replied_notification_ids"]:
+                                state["replied_notification_ids"].append(notification_id)
+                                state["replied_notification_ids"] = state["replied_notification_ids"][-1000:]
+                        bot.save_state(state)
+                        bot.record_metric(f"confirmed_{data['kind']}", count=state[counter])
+                        logging.info("Confirmed daily counter updated: %s=%s", counter, state[counter])
                 return self.reply({"received": True})
             if self.path == "/instagram-status":
                 diagnostics = data.get("diagnostics", {})
@@ -84,11 +120,29 @@ def run_server(bot) -> None:
                     "seen_at": bot.datetime.now().isoformat(timespec="seconds"),
                 })
                 state = bot.load_state()
-                interval = bot.STRATEGY["instagram"].get("story_interval_likes", 100)
+                interval = max(1, int(data.get("storyIntervalLikes") or
+                                      bot.STRATEGY["instagram"].get("story_interval_likes", 100)))
+                like_limit = max(0, int(data.get("dailyLikeLimit") or 0))
+                follow_limit = max(0, int(data.get("dailyFollowLimit") or 0))
                 return self.reply({
                     "shouldWatchStories": state["instagram_likes_since_stories"] >= interval,
                     "confirmedLikesSinceStories": state["instagram_likes_since_stories"],
                     "likesUntilStories": max(0, interval - state["instagram_likes_since_stories"]),
+                    "canLike": like_limit == 0 or state["instagram_likes"] < like_limit,
+                    "canFollow": follow_limit == 0 or state["instagram_follows"] < follow_limit,
+                    "confirmedLikesToday": state["instagram_likes"],
+                    "confirmedFollowsToday": state["instagram_follows"],
+                })
+            if self.path == "/social-availability":
+                state = bot.load_state()
+                site = "facebook" if data.get("site") == "facebook" else "instagram"
+                like_limit = max(0, int(data.get("dailyLikeLimit") or 0))
+                follow_limit = max(0, int(data.get("dailyFollowLimit") or 0))
+                return self.reply({
+                    "canLike": like_limit == 0 or state[f"{site}_likes"] < like_limit,
+                    "canFollow": follow_limit == 0 or state[f"{site}_follows"] < follow_limit,
+                    "confirmedLikesToday": state[f"{site}_likes"],
+                    "confirmedFollowsToday": state[f"{site}_follows"],
                 })
             if self.path == "/instagram-story-batch-complete":
                 state = bot.load_state()
@@ -137,6 +191,30 @@ def run_server(bot) -> None:
                 result = bot.draft_relationship_message(data.get("profile", ""), "connection")
                 bot.record_metric("connection_drafted", allowed=result.get("allowed"), profile_url=data.get("url"))
                 return self.reply(result)
+            if self.path == "/draft-social-comment":
+                result = bot.draft_social_comment(data.get("site", "social"), data.get("context", ""))
+                bot.record_metric("social_comment_drafted", site=data.get("site", "unknown"),
+                                  allowed=result.get("allowed"))
+                return self.reply(result)
+            if self.path == "/draft-inbox-reply":
+                result = bot.draft_inbox_reply(
+                    data.get("site", "social"), data.get("context", ""),
+                    data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
+                    data.get("safeguards") if isinstance(data.get("safeguards"), dict) else None,
+                    str(data.get("contact", "")),
+                    data.get("isGroup") if isinstance(data.get("isGroup"), bool) else None,
+                )
+                bot.record_metric("inbox_reply_drafted", site=data.get("site", "unknown"),
+                                  allowed=result.get("allowed"), contact=str(data.get("contact", ""))[:100],
+                                  reason=result.get("reason", ""))
+                return self.reply(result)
+            if self.path == "/analyze-social-images":
+                result = bot.analyze_social_images(
+                    data.get("site", "social"), data.get("imageUrls", []), data.get("topics", [])
+                )
+                bot.record_metric("social_images_analyzed", site=data.get("site", "social"),
+                                  relevant=result.get("relevant", False))
+                return self.reply(result)
             if self.path != "/cycle": return self.reply({"error": "not found"}, 404)
             diagnostics = data.get("diagnostics", {})
             extension_status.update({
@@ -159,9 +237,17 @@ def run_server(bot) -> None:
             checked = 0
             last_reason = "No visible posts found"
             skipped = []
+            topics = (data.get("topics") if isinstance(data.get("topics"), list)
+                      else bot.STRATEGY.get("engagement_topics", []))
+            features = data.get("features", {})
             logging.info("Scan received %d visible non-promoted posts", received)
             for item in data.get("posts", []):
-                analysis = bot.relevant_post(item.get("text", ""))
+                visual = ({"relevant": False, "reason": "visual recognition disabled"}
+                          if not features.get("imageRecognition", False)
+                          else bot.analyze_social_images("linkedin", item.get("mediaUrls", []), topics))
+                visual_context = (f"\nVISIBLE IMAGE ANALYSIS: {visual.get('reason', '')}; "
+                                  f"topics={visual.get('topics', [])}" if visual.get("relevant") else "")
+                analysis = bot.relevant_post(item.get("text", "") + visual_context, topics)
                 checked += 1
                 last_reason = f"post {checked}: {analysis.get('score', 0)}/100 — {analysis.get('reason', 'no reason')}"
                 logging.info("Ollama checked %s", last_reason)
@@ -173,15 +259,20 @@ def run_server(bot) -> None:
                                     "reason": analysis.get("reason", "no reason"),
                                     "topics": analysis.get("topics", [])})
                     continue
-                action = {"index": item["index"], "like": False, "comment": "", "authorUrl": item.get("authorUrl", "")}
-                if state["likes"] < bot.SETTINGS.max_likes_per_day and not item.get("liked"):
+                action = {"index": item["index"], "like": False, "comment": "",
+                          "connect": bool(features.get("connections", True)),
+                          "authorUrl": item.get("authorUrl", "")}
+                if (features.get("likes", True) and state["likes"] < bot.SETTINGS.max_likes_per_day
+                        and not item.get("liked")):
                     action["like"] = True
-                if state["comments"] < bot.SETTINGS.max_comments_per_day and not item.get("alreadyCommented"):
+                if (features.get("comments", True) and
+                        state["comments"] < bot.SETTINGS.max_comments_per_day and
+                        not item.get("alreadyCommented")):
                     draft = bot.generate_comment(item["text"])
                     review = bot.evaluate_comment(item["text"], draft)
                     if review.get("pass") and int(review.get("confidence", 0)) >= 75:
                         action["comment"] = draft
-                if not action["like"] and not action["comment"]:
+                if not action["like"] and not action["comment"] and not action["connect"]:
                     logging.info("Post %s was already handled; moving on", checked)
                     skipped.append({"index": item.get("index"), "score": analysis.get("score", 0),
                                     "reason": "already liked/commented or daily limit reached",

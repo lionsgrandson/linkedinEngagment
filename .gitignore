@@ -8,3 +8,5 @@ state.json
 STOP
 .env
 .codex-change-log.txt
+account_metrics.jsonl
+reports/

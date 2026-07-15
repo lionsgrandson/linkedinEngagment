@@ -1,12 +1,13 @@
 [project]
 name = "linkedin-engagement-copilot"
-version = "3.7.0"
+version = "3.15.2"
 description = "Local Ollama-powered, observable LinkedIn engagement copilot"
 requires-python = ">=3.11"
 dependencies = [
   "playwright==1.61.0",
   "requests==2.32.4",
   "python-dotenv==1.1.1",
+  "google-analytics-data==0.23.0",
 ]
 
 [tool.ruff]
