@@ -412,7 +412,9 @@ class MaintenanceTests(unittest.TestCase):
         for token in ("claimTransaction", "ccWhatsAppSendTransactions", "sendStarted",
                       "state: 'uncertain'", "sendButton", "[data-icon='send']",
                       "Retry this message once", "clearFailedTransaction",
-                      "normalizeEditorText", "await setEditorText", "sendButton() && candidates.some"):
+                      "normalizeEditorText", "await setEditorText", "sendButton() && candidates.some",
+                      "withTransactionLock", "beginSendTransaction", "duplicate send prevented",
+                      "sendAttemptedAt", "ownerId: instanceId"):
             self.assertIn(token, whatsapp)
         self.assertIn("duplicate retry blocked", whatsapp)
 
@@ -447,6 +449,46 @@ class MaintenanceTests(unittest.TestCase):
         self.assertTrue(result["allowed"])
         self.assertIn("website", result["message"].lower())
         self.assertEqual(result["review"]["reason"], "fact-free acknowledgement")
+
+    def test_inbox_reply_uses_newest_message_without_repeating_intro(self):
+        context = "\n".join((
+            "INBOUND: Hi, I am interested in a website.",
+            "OUTBOUND: Hi, I am Moshe. I build websites.",
+            "INBOUND: Does it support appointment booking?",
+        ))
+        with patch.object(linkedin_bot, "ollama", side_effect=[
+            json.dumps({"allowed": True, "reason": "answers newest question",
+                        "message": "Yes, appointment booking can be included. Which calendar should it connect to?"}),
+            json.dumps({"pass": True, "reason": "specific to appointment booking", "confidence": 97}),
+        ]) as model:
+            result = linkedin_bot.draft_inbox_reply("whatsapp", context)
+        self.assertTrue(result["allowed"])
+        self.assertIn("appointment booking", result["message"])
+        generation_prompt = model.call_args_list[0].args[0]
+        review_prompt = model.call_args_list[1].args[0]
+        self.assertIn("NEWEST INBOUND MESSAGE TO ANSWER", generation_prompt)
+        self.assertIn("Does it support appointment booking?", generation_prompt)
+        self.assertIn("do not introduce yourself", generation_prompt)
+        self.assertIn("Reject generic replies", review_prompt)
+
+    def test_rejected_generic_draft_is_revised_from_latest_inbound(self):
+        context = "\n".join((
+            "INBOUND: I need a website.",
+            "OUTBOUND: What should the website do?",
+            "INBOUND: Can customers pay when they book an appointment?",
+        ))
+        with patch.object(linkedin_bot, "ollama", side_effect=[
+            json.dumps({"allowed": True, "reason": "draft", "message": "Hello, I can build that."}),
+            json.dumps({"pass": False, "reason": "repeated intro and unsupported capability", "confidence": 30}),
+            json.dumps({"allowed": True, "reason": "revised for relevance and safety",
+                        "message": "Which booking system and payment provider do you want to use?"}),
+            json.dumps({"pass": True, "reason": "specific safe clarification", "confidence": 98}),
+        ]) as model:
+            result = linkedin_bot.draft_inbox_reply("whatsapp", context)
+        self.assertTrue(result["allowed"])
+        self.assertIn("booking system", result["message"])
+        self.assertEqual(len(model.call_args_list), 4)
+        self.assertIn("previous WhatsApp reply was rejected", model.call_args_list[2].args[0])
 
     def test_hebrew_followup_uses_hebrew_and_call_context(self):
         context = "INBOUND: אם זה משהו שמדבר אליך, אפשר לקפוץ לשיחה קצרה"

@@ -29,7 +29,7 @@ from playwright.sync_api import BrowserContext, Page, TimeoutError as Playwright
 from playwright.sync_api import sync_playwright
 
 
-APP_VERSION = "3.18.3"
+APP_VERSION = "3.18.4"
 ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", ROOT))
 STOP_FILE = ROOT / "STOP"
@@ -615,6 +615,13 @@ def conversation_requires_reply(context: str) -> bool:
     return len(inbound) >= 2 or bool(direct_request)
 
 
+def newest_inbound_message(context: str) -> str:
+    """Return the newest visible inbound turn without losing its conversational meaning."""
+    inbound = [line.split(":", 1)[1].strip() for line in str(context).splitlines()
+               if line.strip().upper().startswith("INBOUND:") and ":" in line]
+    return inbound[-1] if inbound else ""
+
+
 def safe_followup_reply(context: str) -> str:
     """Return a fact-free acknowledgement when a clear follow-up cannot be drafted."""
     inbound = [line.split(":", 1)[1].strip() for line in str(context).splitlines()
@@ -631,21 +638,34 @@ def safe_followup_reply(context: str) -> str:
     if re.search(r"\bwebsites?\b|\bweb\s+(?:site|development|design)\b", recent, re.I):
         return ("Thanks for following up. What kind of website examples would be most useful "
                 "to you—business sites, online stores, or custom systems?")
-    return "Thanks for following up. I’m here—what would you like help with?"
+    latest = newest_inbound_message(context)
+    latest = re.sub(r"\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s*$", "", latest, flags=re.I).strip()
+    if latest:
+        return (f"I want to answer your latest point accurately: \"{latest[:180]}\" "
+                "What specific result would be most useful to you?")
+    return "I want to answer accurately. What specific result would be most useful to you?"
 
 
 def evaluate_inbox_reply(context: str, message: str,
                          safeguards: dict[str, Any] | None) -> dict[str, Any]:
     """Reject inbox replies that invent company facts or ignore the visible conversation."""
-    prompt = f"""Strictly review this private inbox reply. Reject unsupported company hours,
-prices, services, addresses, policies, availability, promises, or personal claims. Company facts
-may come only from VERIFIED_COMPANY_INFORMATION. Return JSON only:
+    latest_inbound = newest_inbound_message(context)
+    prompt = f"""Strictly review this private inbox reply. It must directly respond to the newest
+inbound message, use the visible conversation context, and must not repeat an introduction, greeting,
+or earlier outbound reply. Reject generic replies that could be sent regardless of what the person
+wrote. Also reject unsupported company hours, prices, services, addresses, policies, availability,
+promises, or personal claims. Company facts may come only from VERIFIED_COMPANY_INFORMATION. Return JSON only:
 {{"pass":true|false,"reason":"short reason","confidence":0-100}}.
+Relevant clarifying questions are allowed. Do not reject a reply merely because it asks the person
+to share a URL, name a platform, choose a preference, or clarify what outcome they want.
 
 {business_facts_guidance(safeguards)}
 
 VISIBLE CONVERSATION:
 {context[-10000:]}
+
+NEWEST INBOUND MESSAGE TO ANSWER:
+{latest_inbound[:3000]}
 
 PROPOSED REPLY:
 {message}"""
@@ -665,26 +685,30 @@ def draft_inbox_reply(site: str, context: str,
     if not policy["allowed"]:
         return {"allowed": False, "reason": policy["reason"], "message": ""}
     requires_reply = conversation_requires_reply(context)
-    verified_facts = str((safeguards or {}).get("businessFacts", "")).strip()
-    if requires_reply and not verified_facts:
-        return {"allowed": True, "reason": "explicit unanswered inquiry without verified facts",
-                "message": safe_followup_reply(context),
-                "review": {"pass": True, "confidence": 100,
-                           "reason": "fact-free acknowledgement"}}
+    latest_inbound = newest_inbound_message(context)
+    has_outbound_history = any(line.strip().upper().startswith("OUTBOUND:")
+                               for line in str(context).splitlines())
+    has_verified_facts = bool(str((safeguards or {}).get("businessFacts", "")).strip())
     prompt = f"""Review this visible {site} inbox conversation and draft one concise reply as
 Moshe Schwartzberg only if the latest message is clearly from the other person and needs an answer.
 Direction is explicitly marked INBOUND or OUTBOUND. When the conversation contains repeated inbound
 follow-ups or an explicit request for an answer, you must provide a safe acknowledgement unless the
 contact policy blocked it. If direction or authorship is uncertain, return allowed=false. Be helpful, truthful, non-salesy,
 and do not invent facts or promise follow-up that is not supported. Match the imported writing
-style when supplied without copying factual content from it. Return JSON only:
+style when supplied without copying factual content from it. Answer the NEWEST INBOUND MESSAGE below,
+not an earlier topic. Use details from that message so the reply could not fit an unrelated message.
+Do not repeat any earlier OUTBOUND reply. {"This is an ongoing conversation, so do not introduce yourself or send another opening greeting." if has_outbound_history else "A brief greeting is allowed only when it naturally fits this first reply."}
+{"Use the verified company information when it answers the question." if has_verified_facts else "No verified company facts were supplied. Do not claim capabilities, prices, availability, or policies; respond to what the person wrote and ask a specific relevant clarification when facts are needed."}
+Return JSON only:
 {{"allowed":true|false,"reason":"short reason","message":"reply text"}}.
 
 {writing_style_guidance(writing_style)}
 
 {business_facts_guidance(safeguards)}
 
-VISIBLE CONVERSATION:\n{context[-10000:]}"""
+VISIBLE CONVERSATION:\n{context[-10000:]}
+
+NEWEST INBOUND MESSAGE TO ANSWER:\n{latest_inbound[:3000]}"""
     result: dict[str, Any] | None = None
     try:
         for _ in range(2):
@@ -715,6 +739,33 @@ VISIBLE CONVERSATION:\n{context[-10000:]}"""
         return {"allowed": False, "reason": result.get("reason", "no reply needed"), "message": ""}
     review = evaluate_inbox_reply(context, message, safeguards)
     if not review.get("pass") or int(review.get("confidence", 0)) < 80:
+        revision_prompt = f"""The previous WhatsApp reply was rejected: {review.get('reason', 'not safe or relevant')}.
+Write one revised reply that directly answers the NEWEST INBOUND MESSAGE, does not repeat an
+introduction or earlier outbound text, and makes no unverified business claims. A specific
+clarifying question is preferable to a generic acknowledgement. Return JSON only:
+{{"allowed":true,"reason":"revised for relevance and safety","message":"reply text"}}.
+
+VISIBLE CONVERSATION:
+{context[-10000:]}
+
+NEWEST INBOUND MESSAGE TO ANSWER:
+{latest_inbound[:3000]}"""
+        try:
+            revised = json.loads(ollama(revision_prompt, json_mode=True))
+            revised_message = sanitize_comment(revised.get("message", ""))
+            revised_review = evaluate_inbox_reply(context, revised_message, safeguards) if revised_message else {}
+            if (revised.get("allowed") and revised_message and revised_review.get("pass")
+                    and int(revised_review.get("confidence", 0)) >= 80):
+                return {"allowed": True, "reason": revised.get("reason", "revised reply approved"),
+                        "message": revised_message, "review": revised_review}
+        except (ValueError, json.JSONDecodeError, requests.RequestException):
+            logging.exception("Revised %s inbox reply generation failed", site)
+        if requires_reply:
+            fallback = safe_followup_reply(context)
+            return {"allowed": True, "reason": "context-specific safe fallback",
+                    "message": fallback,
+                    "review": {"pass": True, "confidence": 100,
+                               "reason": "fact-free contextual clarification"}}
         return {"allowed": False, "reason": review.get("reason", "reply review failed"), "message": ""}
     return {"allowed": True, "reason": result.get("reason", "approved"),
             "message": message, "review": review}

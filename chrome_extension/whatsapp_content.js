@@ -2,9 +2,10 @@
   if (location.hostname !== 'web.whatsapp.com' || window.__codeCrafterWhatsAppBridge) return
   window.__codeCrafterWhatsAppBridge = true
 
-  const EXTENSION_VERSION = '3.18.3'
-  const EXTENSION_BUILD = '6ab978f63b59'
+  const EXTENSION_VERSION = '3.18.4'
+  const EXTENSION_BUILD = '1441821fb223'
   const processed = new Set()
+  const instanceId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`
   let busy = false
   let activeTransaction = ''
   let sendStarted = false
@@ -25,33 +26,55 @@
     return (hash >>> 0).toString(16).padStart(8, '0')
   }
 
+  async function withTransactionLock(transactionId, callback) {
+    if (!navigator.locks?.request) return callback()
+    return navigator.locks.request(`codecrafter-whatsapp-${transactionId}`, callback)
+  }
+
   async function claimTransaction(contact, context) {
     const latestInbound = context.trim().split('\n').filter((line) => line.startsWith('INBOUND:')).at(-1) || ''
     const transactionId = `wa:${fingerprint(`${contact}\n${latestInbound}`)}`
-    const stored = await chrome.storage.local.get('ccWhatsAppSendTransactions')
-    const now = Date.now()
-    const transactions = stored.ccWhatsAppSendTransactions || {}
-    for (const [id, transaction] of Object.entries(transactions)) {
-      if (!transaction?.updatedAt || now - transaction.updatedAt > 7 * 24 * 60 * 60 * 1000) delete transactions[id]
-    }
-    let existing = transactions[transactionId]
-    if (existing?.state === 'drafting' && now - existing.updatedAt > 5 * 60 * 1000) {
-      delete transactions[transactionId]
-      existing = null
-    }
-    if (existing?.state === 'sending' && now - existing.updatedAt > 10 * 60 * 1000) {
-      existing = {...existing, state: 'uncertain', updatedAt: now}
-      transactions[transactionId] = existing
-    }
-    if (existing && ['drafting', 'sending', 'confirmed', 'uncertain', 'rejected'].includes(existing.state)) {
-      return {claimed: false, transactionId, state: existing.state}
-    }
-    if (existing?.retryAfter && existing.retryAfter > now) {
-      return {claimed: false, transactionId, state: 'cooldown'}
-    }
-    transactions[transactionId] = {state: 'drafting', contact, updatedAt: now}
-    await chrome.storage.local.set({ccWhatsAppSendTransactions: transactions})
-    return {claimed: true, transactionId}
+    return withTransactionLock(transactionId, async () => {
+      const stored = await chrome.storage.local.get('ccWhatsAppSendTransactions')
+      const now = Date.now()
+      const transactions = stored.ccWhatsAppSendTransactions || {}
+      for (const [id, transaction] of Object.entries(transactions)) {
+        if (!transaction?.updatedAt || now - transaction.updatedAt > 7 * 24 * 60 * 60 * 1000) delete transactions[id]
+      }
+      let existing = transactions[transactionId]
+      if (existing?.state === 'drafting' && now - existing.updatedAt > 5 * 60 * 1000) {
+        delete transactions[transactionId]
+        existing = null
+      }
+      if (existing?.state === 'sending' && now - existing.updatedAt > 10 * 60 * 1000) {
+        existing = {...existing, state: 'uncertain', updatedAt: now}
+        transactions[transactionId] = existing
+      }
+      if (existing && ['drafting', 'sending', 'confirmed', 'uncertain', 'rejected'].includes(existing.state)) {
+        return {claimed: false, transactionId, state: existing.state}
+      }
+      if (existing?.retryAfter && existing.retryAfter > now) {
+        return {claimed: false, transactionId, state: 'cooldown'}
+      }
+      transactions[transactionId] = {state: 'drafting', contact, ownerId: instanceId, updatedAt: now}
+      await chrome.storage.local.set({ccWhatsAppSendTransactions: transactions})
+      return {claimed: true, transactionId}
+    })
+  }
+
+  async function beginSendTransaction(transactionId, message) {
+    return withTransactionLock(transactionId, async () => {
+      const stored = await chrome.storage.local.get('ccWhatsAppSendTransactions')
+      const transactions = stored.ccWhatsAppSendTransactions || {}
+      const transaction = transactions[transactionId]
+      if (!transaction || transaction.state !== 'drafting' || transaction.ownerId !== instanceId || transaction.sendAttemptedAt)
+        return false
+      transactions[transactionId] = {
+        ...transaction, state: 'sending', message, sendAttemptedAt: Date.now(), updatedAt: Date.now(),
+      }
+      await chrome.storage.local.set({ccWhatsAppSendTransactions: transactions})
+      return true
+    })
   }
 
   async function updateTransaction(transactionId, patch) {
@@ -413,8 +436,12 @@
         }
       }
       if (!send) throw new Error(`WhatsApp Send button not found; editor="${text(input).slice(0, 120)}"`)
+      if (!(await beginSendTransaction(activeTransaction, response.data.message))) {
+        processed.add(key)
+        status('Blank state - duplicate send prevented', 'blank')
+        return
+      }
       sendStarted = true
-      await updateTransaction(activeTransaction, {state: 'sending', message: response.data.message})
       send.scrollIntoView({block: 'nearest', inline: 'nearest'})
       send.focus()
       send.click()
