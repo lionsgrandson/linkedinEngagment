@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterFacebookBridge || location.pathname.startsWith('/messages')) return
   window.__codeCrafterFacebookBridge = true
-  const EXTENSION_VERSION = '3.15.3'
-  const EXTENSION_BUILD = '55292288fa00'
+  const EXTENSION_VERSION = '3.18.1'
+  const EXTENSION_BUILD = '5cf01b8aac28'
   const processed = new Set()
   let profileState = null
   let busy = false
@@ -99,6 +99,7 @@
     await api('/result', 'POST', {
       ok: confirmed,
       kind: confirmed ? 'facebook_like' : undefined,
+      actionId: `facebook:like:${item.key}`,
       reason: confirmed ? `${reasonPrefix} confirmed like` : `${reasonPrefix} like not confirmed`,
     })
     return {confirmed, already: false}
@@ -220,10 +221,11 @@
           follow.click(); await waitActive(600)
           const followed = Boolean(findControl(item.node, /^(Following|Requested)$/i))
           await api('/result', 'POST', {ok: followed, kind: followed ? 'facebook_follow' : undefined,
+            actionId: `facebook:follow:${item.key}`,
             reason: followed ? 'Facebook confirmed follow' : 'Facebook follow not confirmed'})
         }
       }
-      if (config.comments) { const result = await comment(item, config); await api('/result', 'POST', {ok: result.ok, kind: result.ok ? 'facebook_comment' : undefined, reason: result.reason}) }
+      if (config.comments) { const result = await comment(item, config); await api('/result', 'POST', {ok: result.ok, kind: result.ok ? 'facebook_comment' : undefined, actionId: `facebook:comment:${item.key}`, reason: result.reason}) }
       status('Success — Facebook post processed', 'success'); window.scrollBy({top: 650, behavior: 'smooth'}); await waitActive(900)
     } catch (error) { status(`Failure — ${String(error).slice(0, 140)}`, 'failure') }
     finally { busy = false }

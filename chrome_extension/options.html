@@ -76,6 +76,46 @@
       </div>
       <p class="policy-note">Blocked contacts always take priority over every other setting.</p>
     </section>
+    <section class="style-card crm-card" aria-labelledby="crm-title">
+      <div>
+        <p class="site-label">Client data</p>
+        <h2 id="crm-title">CRM integration</h2>
+        <p>Choose the client's CRM and send every confirmed LinkedIn, Instagram, Facebook, or WhatsApp reply to its secure webhook. Existing contacts are matched; compatible CRMs can create missing contacts and follow-up tasks.</p>
+      </div>
+      <div class="crm-grid">
+        <label class="style-source">CRM provider
+          <select id="crm-provider">
+            <option value="none">No CRM</option>
+            <option value="codecrafter">CodeCrafter CRM</option>
+            <option value="creativecrm">CreativeCRM</option>
+            <option value="compatible">CodeCrafter-compatible CRM</option>
+            <option value="custom">Custom compatible webhook</option>
+          </select>
+        </label>
+      </div>
+      <div id="codecrafter-setup" class="guided-setup">
+        <strong>Connect without technical settings</strong>
+        <ol><li>In CodeCrafter CRM, open Settings → Integrations and click <b>Copy desktop-app setup code</b>.</li><li>Return here and click the button below.</li></ol>
+        <button id="paste-crm-code" class="primary" type="button">Paste setup code and connect</button>
+      </div>
+      <details id="crm-advanced">
+        <summary>Advanced manual setup</summary>
+        <div class="crm-grid advanced-fields">
+          <label class="style-source">Webhook endpoint
+            <input id="crm-webhook-url" type="url" placeholder="https://project.supabase.co/functions/v1/crm-ingest">
+          </label>
+          <label class="style-source">API token
+            <input id="crm-api-token" type="password" autocomplete="off" placeholder="Bearer token">
+          </label>
+        </div>
+      </details>
+      <div class="crm-actions">
+        <label class="feature switch"><input id="crm-enabled" type="checkbox"><span></span><em>Sync confirmed replies and follow-ups</em></label>
+        <button id="test-crm" class="secondary" type="button">Test CRM connection</button>
+        <button id="clear-whatsapp-retries" class="secondary" type="button">Clear failed WhatsApp retry</button>
+      </div>
+      <p id="crm-state" class="policy-note" data-phase="blank">Blank state — CRM logging is not configured.</p>
+    </section>
     <section id="platforms" aria-busy="true"></section>
     <footer>
       <button id="open-dashboard" class="secondary">Open statistics dashboard</button>

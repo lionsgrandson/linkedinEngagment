@@ -12,3 +12,6 @@ account_metrics.jsonl
 linkedin_metrics.jsonl
 skipped_post_topics.txt
 reports/
+build/
+dist/
+*.spec

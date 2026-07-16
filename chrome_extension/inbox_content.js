@@ -6,13 +6,16 @@
     (platform === 'facebook' && location.pathname.startsWith('/messages'))
   if (!platform || !onInbox || window.__codeCrafterInboxBridge) return
   window.__codeCrafterInboxBridge = true
-  const EXTENSION_VERSION = '3.15.3'
-  const EXTENSION_BUILD = '55292288fa00'
+  const EXTENSION_VERSION = '3.18.1'
+  const EXTENSION_BUILD = '5cf01b8aac28'
   const processed = new Set()
   let busy = false
   let emptyScans = 0
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-  const api = (path, method = 'GET', body = null) => chrome.runtime.sendMessage({type: 'localApi', path, method, body})
+  const api = (path, method = 'GET', body = null) => {
+    if (!chrome.runtime?.id) throw new Error('extension was reloaded; refresh this inbox page')
+    return chrome.runtime.sendMessage({type: 'localApi', path, method, body})
+  }
   const visible = (element) => element && element.offsetParent !== null
   const text = (element) => (element?.innerText || element?.textContent || '').replace(/\s+/g, ' ').trim()
   const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim()
@@ -57,6 +60,15 @@
   function unreadConversation() {
     return conversationRows().find((row) => isUnreadConversation(row) && !processed.has(conversationKey(row)))
   }
+  function activeConversation() {
+    if (platform !== 'linkedin') return null
+    const activeLink = document.querySelector(
+      '.msg-conversation-listitem__link--active,.msg-conversations-container__convo-item-link--active',
+    )
+    return activeLink?.closest('li.msg-conversation-listitem') || conversationRows().find((row) =>
+      /active conversation/i.test(`${text(row)} ${row.getAttribute('aria-label') || ''}`),
+    ) || null
+  }
   function conversationContact(conversation) {
     const labelled = conversation.querySelector("[data-testid*='title' i],[class*='title' i],img[alt],[dir='auto']")
     const labelledText = labelled?.tagName === 'IMG' ? String(labelled.alt || '').trim() : text(labelled)
@@ -82,13 +94,18 @@
   }
   function conversationContext() {
     if (platform !== 'linkedin') return text(document.querySelector('main') || document.body).slice(-6000)
-    return linkedInEvents().slice(-20).map((event) => text(event)).join('\n').slice(-9000)
+    return linkedInEvents().slice(-20).map((event) => {
+      const content = text(event)
+      const outbound = /Moshe Schwartzberg sent the following message/i.test(content) ||
+        /Moshe Schwartzberg\s+\d{1,2}:\d{2}/i.test(content)
+      return `${outbound ? 'OUTBOUND' : 'INBOUND'}: ${content}`
+    }).join('\n').slice(-9000)
   }
   function latestIsInbound() {
     if (platform !== 'linkedin') return true
     const content = text(linkedInEvents().at(-1))
-    return Boolean(content) && !/^Moshe Schwartzberg sent the following message/i.test(content) &&
-      !/^Moshe Schwartzberg\s+\d{1,2}:\d{2}/i.test(content)
+    return Boolean(content) && !/Moshe Schwartzberg sent the following message/i.test(content) &&
+      !/Moshe Schwartzberg\s+\d{1,2}:\d{2}/i.test(content)
   }
   async function openConversation(row) {
     const target = row.querySelector(
@@ -171,7 +188,12 @@
         status('Blank state - inbox replies disabled', 'blank')
         return
       }
-      const conversation = unreadConversation()
+      let conversation = unreadConversation()
+      let alreadyOpen = false
+      if (!conversation && latestIsInbound() && editor()) {
+        conversation = activeConversation()
+        alreadyOpen = Boolean(conversation)
+      }
       if (!conversation) {
         emptyScans += 1
         status('Blank state - no unread conversations', 'blank')
@@ -182,8 +204,8 @@
       emptyScans = 0
       const key = conversationKey(conversation)
       const contact = conversationContact(conversation)
-      status(`Opening unread conversation with ${contact || 'contact'}…`, 'loading')
-      if (!(await openConversation(conversation))) {
+      status(`${alreadyOpen ? 'Reading active' : 'Opening unread'} conversation with ${contact || 'contact'}…`, 'loading')
+      if (!alreadyOpen && !(await openConversation(conversation))) {
         processed.add(key)
         status('Failure - conversation did not open or finish loading', 'failure')
         return
@@ -229,8 +251,16 @@
         return
       }
       const root = input.closest('form,[role=dialog]') || document
-      const send = [...root.querySelectorAll("button,[role='button']")].filter(visible)
-        .find((node) => /^(Send|Send message)$/i.test(text(node)) || /^Send/i.test(node.getAttribute('aria-label') || ''))
+      let send = null
+      const sendDeadline = Date.now() + 5000
+      while (Date.now() < sendDeadline && !send) {
+        send = [...root.querySelectorAll("button,[role='button']")].filter(visible)
+          .find((node) => /^(Send|Send message)$/i.test(text(node)) || /^Send/i.test(node.getAttribute('aria-label') || ''))
+        if (!send || send.disabled) {
+          send = null
+          await sleep(200)
+        }
+      }
       if (!send || send.disabled) return status('Failure - enabled Send button not found', 'failure')
       send.click()
       const confirmed = await waitForExactOutgoing(draft.data.message)
@@ -238,10 +268,28 @@
       await api('/result', 'POST', {
         ok: confirmed,
         kind: confirmed ? 'inbox_reply' : undefined,
+        actionId: `${platform}:reply:${contact}:${normalize(draft.data.message).slice(0, 180)}`,
         site: platform,
         reason: confirmed ? `${platform} displayed the exact outgoing reply` : `${platform} did not display the exact outgoing reply`,
       })
-      status(confirmed ? 'Success - inbox reply sent' : 'Failure - reply not confirmed', confirmed ? 'success' : 'failure')
+      if (confirmed && settings.integrations?.crm?.enabled) {
+        const due = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        const actionId = `${platform}:reply:${contact}:${normalize(draft.data.message).slice(0, 180)}`
+        const crmResult = await api('/crm-event', 'POST', {
+          crm: settings.integrations.crm,
+          event: {
+            eventType: `${platform}.reply.sent`, occurredAt: new Date().toISOString(),
+            channel: platform, contact, inboundContext: conversationContext(),
+            outboundMessage: draft.data.message, status: 'sent', actionId,
+            tasks: [{title: `Follow up with ${contact || `${platform} contact`}`, dueDate: due, priority: 'Medium', sourceId: `${actionId}:follow-up`, sourceLabel: `${platform} inbox`}],
+          },
+        })
+        status(crmResult?.ok && crmResult.data?.delivered
+          ? 'Success - inbox reply sent and logged in CRM'
+          : 'Failure - reply sent but CRM logging failed', crmResult?.ok && crmResult.data?.delivered ? 'success' : 'failure')
+      } else {
+        status(confirmed ? 'Success - inbox reply sent' : 'Failure - reply not confirmed', confirmed ? 'success' : 'failure')
+      }
     } catch (error) {
       status(`Failure - ${String(error).slice(0, 150)}`, 'failure')
     } finally {
@@ -249,6 +297,14 @@
     }
   }
   panel()
+  api('/extension-heartbeat', 'POST', {
+    site: `${platform}-inbox`, extensionVersion: EXTENSION_VERSION,
+    extensionBuild: EXTENSION_BUILD, url: location.href,
+  }).catch(() => {})
+  setInterval(() => api('/extension-heartbeat', 'POST', {
+    site: `${platform}-inbox`, extensionVersion: EXTENSION_VERSION,
+    extensionBuild: EXTENSION_BUILD, url: location.href,
+  }).catch(() => {}), 30000)
   setInterval(cycle, 5000)
   cycle()
 })()

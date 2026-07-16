@@ -2,8 +2,8 @@
   if (window.__codeCrafterInstagramBridge || location.pathname.startsWith('/direct')) return
   window.__codeCrafterInstagramBridge = true
 
-  const EXTENSION_VERSION = '3.15.3'
-  const EXTENSION_BUILD = '55292288fa00'
+  const EXTENSION_VERSION = '3.18.1'
+  const EXTENSION_BUILD = '5cf01b8aac28'
   const processedPosts = new Set()
   const viewedStoryFrames = new Set()
   const PROFILE_STATE_KEY = 'ccInstagramProfileBatch'
@@ -175,7 +175,7 @@
     return false
   }
 
-  async function likeProfilePost(item, canLike = true) {
+  async function likeProfilePost(item, actionId, canLike = true) {
     if (!canLike) return {confirmed: false, already: false, limited: true}
     const unlike = findControl(item.node, /(Unlike|Remove like|No longer like)/i)
     if (unlike) return {confirmed: false, already: true}
@@ -190,6 +190,7 @@
     await api('/result', 'POST', {
       kind: confirmed ? 'instagram_like' : undefined,
       ok: confirmed,
+      actionId: `instagram:like:${actionId}`,
       reason: confirmed ? 'Instagram confirmed profile-batch like' : 'Instagram profile-batch like not confirmed',
     })
     return {confirmed, already: false}
@@ -223,7 +224,7 @@
       site: 'instagram', dailyLikeLimit: config.dailyLikeLimit,
       dailyFollowLimit: config.dailyFollowLimit,
     })
-    const result = await likeProfilePost(item, availability?.data?.canLike !== false)
+    const result = await likeProfilePost(item, state.pending, availability?.data?.canLike !== false)
     if (result.confirmed) state[state.phase] += 1
     if (result.limited) state.processed = state.processed.filter((url) => url !== state.pending)
     writeProfileState(state)
@@ -398,6 +399,7 @@
     await api('/result', 'POST', {
       kind: 'instagram_story_view',
       ok: true,
+      actionId: `instagram:story:${key}`,
       reason: 'Instagram story viewed before advancing',
     })
     const batchCount = Number(sessionStorage.getItem(STORY_COUNT_KEY) || 0) + 1
@@ -442,6 +444,7 @@
           liked = Boolean(findControl(item.node, /(Unlike|Remove like|No longer like)/i))
         }
         await api('/result', 'POST', {kind: liked ? 'instagram_like' : undefined, ok: liked,
+          actionId: `instagram:like:${item.key}`,
           reason: liked ? 'Instagram confirmed like' : 'Instagram did not confirm like'})
       }
     }
@@ -451,6 +454,7 @@
         follow.click(); await waitActive(600)
         followed = Boolean(findControl(item.node, /^(Following|Requested)$/i))
         await api('/result', 'POST', {kind: followed ? 'instagram_follow' : undefined, ok: followed,
+          actionId: `instagram:follow:${item.key}`,
           reason: followed ? 'Instagram confirmed follow' : 'Instagram follow not confirmed'})
       }
     }

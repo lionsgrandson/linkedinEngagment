@@ -167,6 +167,100 @@
       input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', syncSafeguards)
     }
     syncSafeguards()
+    const crmProvider = document.getElementById('crm-provider')
+    const crmWebhookUrl = document.getElementById('crm-webhook-url')
+    const crmApiToken = document.getElementById('crm-api-token')
+    const crmEnabled = document.getElementById('crm-enabled')
+    const crmState = document.getElementById('crm-state')
+    const guidedCrmSetup = document.getElementById('codecrafter-setup')
+    const syncCrm = () => {
+      const crm = settings.integrations.crm
+      crm.provider = crmProvider.value
+      crm.webhookUrl = crmWebhookUrl.value.trim()
+      crm.apiToken = crmApiToken.value.trim()
+      crm.enabled = crmEnabled.checked && crm.provider !== 'none'
+      crmEnabled.disabled = crm.provider === 'none'
+      crmWebhookUrl.disabled = crm.provider === 'none'
+      crmApiToken.disabled = crm.provider === 'none'
+      guidedCrmSetup.style.display = crm.provider === 'codecrafter' ? 'grid' : 'none'
+      if (crm.provider === 'none') {
+        crmState.textContent = 'Blank state — CRM logging is not configured.'
+        crmState.dataset.phase = 'blank'
+      } else if (crm.enabled && crm.webhookUrl) {
+        crmState.textContent = `Filled state — ${crmProvider.selectedOptions[0].textContent} is ready to test.`
+        crmState.dataset.phase = 'filled'
+      } else {
+        crmState.textContent = 'Blank state — enter a webhook endpoint and enable CRM logging.'
+        crmState.dataset.phase = 'blank'
+      }
+    }
+    const decodeSetupCode = (value) => {
+      const encoded = String(value || '').trim().replace(/^CCCRM1\./i, '')
+      const decoded = JSON.parse(atob(encoded))
+      if (decoded?.v !== 1 || decoded.provider !== 'codecrafter' ||
+          !/^https:\/\//i.test(decoded.webhookUrl || '') || !String(decoded.apiToken || '').startsWith('cccrm_')) {
+        throw new Error('This is not a valid CodeCrafter CRM setup code.')
+      }
+      return decoded
+    }
+    const testCrm = async () => {
+      syncCrm()
+      if (settings.integrations.crm.provider === 'none' || !settings.integrations.crm.webhookUrl) {
+        crmState.textContent = 'Failure — choose a CRM and connect it first.'
+        crmState.dataset.phase = 'failure'
+        return false
+      }
+      crmState.textContent = 'Loading — testing the CRM connection…'
+      crmState.dataset.phase = 'loading'
+      const result = await chrome.runtime.sendMessage({
+        type: 'localApi', path: '/crm-test', method: 'POST', body: {crm: settings.integrations.crm},
+      })
+      const connected = Boolean(result?.ok && result.data?.delivered)
+      crmState.textContent = connected
+        ? 'Success — CodeCrafter CRM is connected and ready.'
+        : `Failure — ${result?.data?.error || result?.error || 'the CRM rejected the connection test.'}`
+      crmState.dataset.phase = connected ? 'success' : 'failure'
+      return connected
+    }
+    const crm = settings.integrations.crm
+    crmProvider.value = ['hubspot', 'salesforce', 'monday'].includes(crm.provider) ? 'custom' : crm.provider
+    crmWebhookUrl.value = crm.webhookUrl
+    crmApiToken.value = crm.apiToken
+    crmEnabled.checked = crm.enabled
+    for (const input of [crmProvider, crmWebhookUrl, crmApiToken, crmEnabled]) {
+      input.addEventListener(input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'input', syncCrm)
+    }
+    syncCrm()
+    document.getElementById('test-crm').onclick = () => void testCrm()
+    document.getElementById('paste-crm-code').onclick = async () => {
+      crmState.textContent = 'Loading — reading and checking the setup code…'
+      crmState.dataset.phase = 'loading'
+      try {
+        const connection = decodeSetupCode(await navigator.clipboard.readText())
+        crmProvider.value = 'codecrafter'
+        crmWebhookUrl.value = connection.webhookUrl
+        crmApiToken.value = connection.apiToken
+        crmEnabled.checked = true
+        syncCrm()
+        settings = await CodeCrafterSettings.save(settings)
+        await testCrm()
+      } catch (error) {
+        crmState.textContent = `Failure — ${error instanceof Error ? error.message : String(error)}`
+        crmState.dataset.phase = 'failure'
+      }
+    }
+    document.getElementById('clear-whatsapp-retries').onclick = async () => {
+      const stored = await chrome.storage.local.get('ccWhatsAppSendTransactions')
+      const transactions = stored.ccWhatsAppSendTransactions || {}
+      let cleared = 0
+      for (const [id, transaction] of Object.entries(transactions)) {
+        if (transaction?.state === 'failed') { delete transactions[id]; cleared += 1 }
+      }
+      await chrome.storage.local.set({ccWhatsAppSendTransactions: transactions})
+      status(cleared
+        ? `Success — cleared ${cleared} failed WhatsApp retry lock${cleared === 1 ? '' : 's'}.`
+        : 'Blank state — there are no failed WhatsApp retries to clear.', cleared ? 'success' : 'blank')
+    }
     Object.entries(definitions).forEach(([platform, definition]) => buildCard(platform, definition))
     document.getElementById('platforms').setAttribute('aria-busy', 'false')
     status('Filled state — settings loaded.', 'filled')
@@ -174,6 +268,7 @@
       status('Saving settings…', 'loading')
       try {
         syncSafeguards()
+        syncCrm()
         const whatsapp = settings.platforms.whatsapp
         whatsapp.optedIn = whatsapp.enabled && whatsapp.messages
         whatsapp.consentRevision = whatsapp.optedIn ? 2 : 0
@@ -184,6 +279,7 @@
     }
     document.getElementById('run-messages').onclick = async () => {
       syncSafeguards()
+      syncCrm()
       status('Opening enabled inbox tabs…', 'loading')
       const whatsapp = settings.platforms.whatsapp
       whatsapp.optedIn = whatsapp.enabled && whatsapp.messages

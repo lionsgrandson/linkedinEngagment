@@ -15,6 +15,14 @@
       allowedContacts: [],
       blockedContacts: [],
     },
+    integrations: {
+      crm: {
+        provider: 'none',
+        webhookUrl: '',
+        apiToken: '',
+        enabled: false,
+      },
+    },
     platforms: {
       linkedin: {
         enabled: true,
@@ -93,6 +101,14 @@
           ? [...new Set(policy[key].map((value) => String(value).trim()).filter(Boolean))].slice(0, 500)
           : []
       }
+    }
+    if (saved?.integrations?.crm) {
+      const crm = saved.integrations.crm
+      const providers = ['none', 'codecrafter', 'creativecrm', 'compatible', 'custom']
+      result.integrations.crm.provider = providers.includes(crm.provider) ? crm.provider : 'none'
+      result.integrations.crm.webhookUrl = String(crm.webhookUrl || '').trim().slice(0, 2000)
+      result.integrations.crm.apiToken = String(crm.apiToken || '').trim().slice(0, 4000)
+      result.integrations.crm.enabled = crm.enabled === true && result.integrations.crm.provider !== 'none'
     }
     for (const [platform, values] of Object.entries(saved?.platforms || {})) {
       if (!result.platforms[platform]) continue

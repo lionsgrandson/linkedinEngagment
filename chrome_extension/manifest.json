@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "CodeCrafter Social Bridge",
-  "version": "3.15.3",
+  "version": "3.18.1",
   "description": "Configurable local engagement automation for LinkedIn, Instagram, Facebook, and WhatsApp Web.",
   "permissions": [
     "tabs",
     "storage",
-    "alarms"
+    "alarms",
+    "clipboardRead"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",

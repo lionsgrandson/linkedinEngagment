@@ -6,8 +6,66 @@ import logging
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
+
+import requests
 
 from reporting import record_snapshot, write_report
+
+
+CRM_PROVIDERS = {"codecrafter", "creativecrm", "compatible", "custom"}
+
+
+def deliver_crm_event(config: dict, event: dict) -> dict:
+    """Deliver one normalized event to a client-selected CRM webhook."""
+    provider = str(config.get("provider", "none")).strip().lower()
+    webhook_url = str(config.get("webhookUrl", "")).strip()
+    enabled = config.get("enabled") is True
+    if not enabled or provider == "none":
+        return {"delivered": False, "skipped": True, "reason": "CRM logging is disabled"}
+    if provider not in CRM_PROVIDERS:
+        return {"delivered": False, "error": "Unsupported CRM provider"}
+    parsed = urlparse(webhook_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return {"delivered": False, "error": "CRM webhook must be a valid HTTP(S) URL"}
+    payload = {
+        "schemaVersion": 2,
+        "provider": provider,
+        "eventType": str(event.get("eventType", "communication.reply.sent")),
+        "occurredAt": str(event.get("occurredAt", "")),
+        "externalReference": str(event.get("actionId", ""))[:700],
+        "contact": {
+            "name": str(event.get("contact", ""))[:300],
+            "phone": str(event.get("phone", ""))[:80],
+            "email": str(event.get("email", ""))[:320],
+            "company": str(event.get("company", ""))[:300],
+        },
+        "conversation": {
+            "channel": str(event.get("channel", "social"))[:40],
+            "inboundContext": str(event.get("inboundContext", ""))[-10000:],
+            "outboundMessage": str(event.get("outboundMessage", ""))[:10000],
+            "status": str(event.get("status", "sent"))[:40],
+            "actionId": str(event.get("actionId", ""))[:700],
+        },
+        "tasks": event.get("tasks", []) if isinstance(event.get("tasks"), list) else [],
+        "events": event.get("events", []) if isinstance(event.get("events"), list) else [],
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "CodeCrafter-Social-Bridge/CRM",
+        "X-CodeCrafter-Event": payload["eventType"],
+    }
+    token = str(config.get("apiToken", "")).strip()
+    if token:
+        headers["Authorization"] = token if token.lower().startswith("bearer ") else f"Bearer {token}"
+    try:
+        response = requests.post(webhook_url, json=payload, headers=headers, timeout=12)
+        if not response.ok:
+            return {"delivered": False, "status": response.status_code,
+                    "error": f"CRM returned HTTP {response.status_code}"}
+        return {"delivered": True, "status": response.status_code, "provider": provider}
+    except requests.RequestException as exc:
+        return {"delivered": False, "error": f"CRM connection failed: {exc}"}
 
 
 def run_server(bot) -> None:
@@ -55,8 +113,15 @@ def run_server(bot) -> None:
                     return self.reply({"error": "invalid snapshot source or metrics"}, 400)
                 numeric = {str(key): value for key, value in metrics.items()
                            if isinstance(value, (int, float)) and not isinstance(value, bool)}
+                verification = data.get("verification") if isinstance(data.get("verification"), dict) else {}
+                verified_social = (source in {"linkedin", "facebook", "instagram"} and
+                                   verification.get("status") == "verified" and
+                                   verification.get("method") in {"self_profile_dom", "self_network_dom"} and
+                                   bool(str(verification.get("account", "")).strip()))
+                if not verified_social:
+                    verification = {"status": "unverified", "method": "browser_dom_rejected"}
                 return self.reply({"received": True, "snapshot": record_snapshot(
-                    bot.ROOT, source, numeric, data.get("captured_at"))})
+                    bot.ROOT, source, numeric, data.get("captured_at"), verification)})
             if self.path == "/extension-heartbeat":
                 site = data.get("site", "unknown")
                 status = {
@@ -71,6 +136,23 @@ def run_server(bot) -> None:
                 logging.info("Extension heartbeat: site=%s version=%s build=%s url=%s",
                              site, status["version"], status["build"], status["url"])
                 return self.reply({"received": True, "site": site})
+            if self.path in {"/crm-event", "/crm-test"}:
+                config = data.get("crm") if isinstance(data.get("crm"), dict) else {}
+                event = data.get("event") if isinstance(data.get("event"), dict) else {}
+                if self.path == "/crm-test":
+                    event = {
+                        "eventType": "crm.connection.test",
+                        "occurredAt": bot.datetime.now().isoformat(timespec="seconds"),
+                        "contact": "CodeCrafter connection test",
+                        "status": "test",
+                    }
+                result = deliver_crm_event(config, event)
+                if result.get("delivered"):
+                    bot.record_metric("crm_event_delivered", provider=result.get("provider", "unknown"),
+                                      event_type=event.get("eventType", "unknown"))
+                    return self.reply(result)
+                logging.error("CRM event was not delivered: %s", result.get("error") or result.get("reason"))
+                return self.reply(result, 502 if not result.get("skipped") else 200)
             if self.path == "/result":
                 level = logging.INFO if data.get("ok") else logging.ERROR
                 logging.log(level, "Browser action result: ok=%s reason=%s", data.get("ok"), data.get("reason"))
@@ -81,6 +163,16 @@ def run_server(bot) -> None:
                 if data.get("ok") and data.get("kind") in supported:
                     with result_lock:
                         state = bot.load_state()
+                        action_id = str(data.get("actionId", "")).strip()[:700]
+                        if not action_id:
+                            logging.error("Rejected confirmed action without a unique actionId: kind=%s",
+                                          data.get("kind"))
+                            return self.reply({"received": False,
+                                               "error": "confirmed actions require actionId"}, 400)
+                        action_key = f"{data['kind']}|{action_id}"
+                        if action_key in state.get("confirmed_action_ids", []):
+                            logging.info("Ignored duplicate confirmed action: %s", action_key)
+                            return self.reply({"received": True, "duplicate": True})
                         counter = {"like": "likes", "comment": "comments",
                                    "message": "messages", "connection": "connections",
                                    "connection_accept": "connections_accepted",
@@ -93,6 +185,8 @@ def run_server(bot) -> None:
                                    "facebook_follow": "facebook_follows",
                                    "inbox_reply": "inbox_replies"}[data["kind"]]
                         state[counter] += 1
+                        state.setdefault("confirmed_action_ids", []).append(action_key)
+                        state["confirmed_action_ids"] = state["confirmed_action_ids"][-5000:]
                         if data["kind"] == "instagram_like":
                             state["instagram_likes_since_stories"] += 1
                         url = data.get("url", "")
@@ -107,7 +201,10 @@ def run_server(bot) -> None:
                                 state["replied_notification_ids"].append(notification_id)
                                 state["replied_notification_ids"] = state["replied_notification_ids"][-1000:]
                         bot.save_state(state)
-                        bot.record_metric(f"confirmed_{data['kind']}", count=state[counter])
+                        bot.record_metric(f"confirmed_{data['kind']}", count=state[counter],
+                                          verified=True, action_id=action_key,
+                                          evidence=str(data.get("reason", ""))[:300],
+                                          site=str(data.get("site", ""))[:40])
                         logging.info("Confirmed daily counter updated: %s=%s", counter, state[counter])
                 return self.reply({"received": True})
             if self.path == "/instagram-status":

@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.15.3'
-  const EXTENSION_BUILD = '55292288fa00'
+  const EXTENSION_VERSION = '3.18.1'
+  const EXTENSION_BUILD = '5cf01b8aac28'
   let paused = false
   let busy = false
   const processed = new Set()
@@ -167,7 +167,7 @@
     box.style.cssText =
       'position:fixed;right:18px;bottom:18px;z-index:2147483647;width:250px;padding:14px;border-radius:12px;background:#111827;color:#fff;font:14px Arial;box-shadow:0 8px 30px #0006'
     box.innerHTML =
-      `<style>@keyframes ccPulse{50%{opacity:.35}}#cc-status[data-state="loading"]::after{content:"";display:block;width:72%;height:7px;margin-top:7px;border-radius:5px;background:#94a3b8;animation:ccPulse 1s infinite}</style><b>CodeCrafter Bot v${EXTENSION_VERSION}</b><div id="cc-status" data-state="loading" style="margin:9px 0">Connecting to Python...</div><button id="cc-pause" style="width:100%;padding:10px;border:0;border-radius:8px;background:#f59e0b;font-weight:700;cursor:pointer;transition:filter .15s">Pause bot</button>`
+      `<style>@keyframes ccPulse{50%{opacity:.35}}#cc-status[data-state="loading"]::after{content:"";display:block;width:72%;height:7px;margin-top:7px;border-radius:5px;background:#94a3b8;animation:ccPulse 1s infinite}#cc-minimize:hover,#cc-pause:hover{filter:brightness(1.12)}</style><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b>CodeCrafter Bot v${EXTENSION_VERSION}</b><button id="cc-minimize" aria-label="Minimize bot panel" title="Minimize" style="width:28px;height:28px;border:1px solid #475569;border-radius:7px;background:#1e293b;color:#fff;font-size:18px;line-height:1;cursor:pointer;transition:filter .15s">−</button></div><div id="cc-panel-body"><div id="cc-status" data-state="loading" style="margin:9px 0">Connecting to Python...</div><button id="cc-pause" style="width:100%;padding:10px;border:0;border-radius:8px;background:#f59e0b;font-weight:700;cursor:pointer;transition:filter .15s">Pause bot</button></div>`
     document.documentElement.appendChild(box)
     CodeCrafterSettings.load().then(({ui}) => {
       if (!ui.showOverlay) box.style.display = 'none'
@@ -182,6 +182,20 @@
       button.style.background = paused ? '#22c55e' : '#f59e0b'
       status(paused ? 'Paused — nothing will submit' : 'Running')
     }
+    const minimize = box.querySelector('#cc-minimize')
+    const body = box.querySelector('#cc-panel-body')
+    const applyMinimized = (minimized) => {
+      body.style.display = minimized ? 'none' : 'block'
+      minimize.textContent = minimized ? '+' : '−'
+      minimize.setAttribute('aria-label', minimized ? 'Expand bot panel' : 'Minimize bot panel')
+      minimize.title = minimized ? 'Expand' : 'Minimize'
+      Object.assign(box.style, minimized
+        ? {width: '250px', padding: '9px 11px'}
+        : {width: '250px', padding: '14px'})
+      sessionStorage.setItem('ccBotPanelMinimized', minimized ? '1' : '0')
+    }
+    applyMinimized(sessionStorage.getItem('ccBotPanelMinimized') === '1')
+    minimize.onclick = () => applyMinimized(body.style.display !== 'none')
   }
   function status(text, state = 'filled') {
     panel()
@@ -306,6 +320,7 @@
         await api('/result', 'POST', {
           ok: reacted,
           kind: 'like',
+          actionId: `linkedin:like:${action.key}`,
           reason: reacted
             ? 'LinkedIn confirmed like'
             : 'like state did not change',
@@ -379,6 +394,7 @@
     await api('/result', 'POST', {
       ok: confirmation.ok,
       kind: 'comment',
+      actionId: `linkedin:comment:${action.key}:${normalizeText(action.comment).slice(0, 160)}`,
       reason: confirmation.reason,
     })
     if (confirmation.ok && action.connect) await queueProfileConnection(action.authorUrl)
@@ -465,6 +481,7 @@
       await api('/result', 'POST', {
         ok: confirmed,
         kind: confirmed ? 'message' : undefined,
+        actionId: `linkedin:message:${task.url}:${normalizeText(response.data.message).slice(0, 160)}`,
         url: task.url,
         reason: confirmed
           ? 'LinkedIn confirmed accepted-connection opener'
@@ -528,6 +545,7 @@
       await api('/result', 'POST', {
         ok: confirmation.ok,
         kind: confirmation.ok ? 'connection' : undefined,
+        actionId: `linkedin:connection:${task.url}`,
         url: task.url,
         reason: confirmation.reason,
       })
@@ -569,9 +587,20 @@
       }
     }
     if (!(await countdown('Connection request'))) return
-    dialog = [...document.querySelectorAll("div[role='dialog']")].filter(visible).at(-1) || dialog
-    const send = findControl(/^(Send|Send invitation|Send now|Send without a note)$/i, dialog)
+    status('Connection timer complete - locating the live Send button', 'loading')
+    let send = null
+    const sendDeadline = Date.now() + 5000
+    while (!send && Date.now() < sendDeadline) {
+      dialog = [...document.querySelectorAll("div[role='dialog']")].filter(visible).at(-1) || dialog
+      send = findControl(/^(Send|Send invitation|Send now|Send without a note)$/i, dialog) ||
+        findControl(/^(Send|Send invitation|Send now|Send without a note)$/i)
+      if (!send || send.disabled) {
+        send = null
+        await sleep(200)
+      }
+    }
     if (!send || send.disabled) {
+      status('Failure - LinkedIn did not expose an enabled invitation Send button', 'failure')
       await api('/result', 'POST', {
         ok: false,
         kind: 'connection',
@@ -586,6 +615,7 @@
     await api('/result', 'POST', {
       ok: confirmation.ok,
       kind: confirmation.ok ? 'connection' : undefined,
+      actionId: `linkedin:connection:${task.url}`,
       url: task.url,
       reason: confirmation.reason,
     })
@@ -694,7 +724,7 @@
     const response = await api('/draft-notification-reply', 'POST', {
       notificationId: task.id,
       notificationText: task.notificationText,
-      context: (document.querySelector('main')?.innerText || '').slice(-10000),
+      context: `${task.notificationText || ''}\n${normalizeText(target.innerText)}`.slice(-10000),
     })
     if (!response?.ok || !response.data.allowed || !response.data.reply) {
       const reason = `Notification reply skipped: ${response?.data?.reason || 'draft failed'}`
@@ -707,13 +737,14 @@
       return status('Blank state - this reply is already posted', 'blank')
     }
     replyButton.click()
-    const editor = await waitForVisible([
-      "div[contenteditable='true'][role='textbox']",
-      'textarea',
-    ], 8000, target) || await waitForVisible([
-      "div[contenteditable='true'][role='textbox']",
-      'textarea',
-    ], 4000)
+    const replyEditorSelectors = [
+      "div[contenteditable='true'][role='textbox'][aria-label*='reply' i]",
+      "div[contenteditable='true'][role='textbox'][data-placeholder*='reply' i]",
+      "textarea[placeholder*='reply' i]",
+      "textarea[aria-label*='reply' i]",
+    ]
+    const editor = await waitForVisible(replyEditorSelectors, 8000, target) ||
+      await waitForVisible(replyEditorSelectors, 4000)
     if (!editor) {
       const reason = 'Notification reply editor did not appear'
       await api('/result', 'POST', { ok: false, reason })
@@ -745,6 +776,7 @@
     await api('/result', 'POST', {
       ok: confirmation.ok,
       kind: confirmation.ok ? 'notification_reply' : undefined,
+      actionId: `linkedin:notification_reply:${task.id}:${normalizeText(response.data.reply).slice(0, 160)}`,
       notificationId: task.id,
       reason: confirmation.reason,
     })
@@ -762,28 +794,46 @@
   async function handleIncomingInvitations() {
     status('Loading incoming invitations', 'loading')
     await waitForVisible(['main'], 12000)
-    const accepts = controls(document).filter((control) =>
-      /^(Accept(?:\s|$)|Accept .+ invitation)/i.test(label(control)),
+    const attempted = new Set()
+    const availableAccepts = () => controls(document).filter((control) =>
+      visible(control) && /^(Accept(?:\s|$)|Accept .+ invitation)/i.test(label(control)),
     )
-    if (!accepts.length) {
+    const invitationKey = (control) => normalizeText(
+      (control.closest('li,article,[role=listitem]') || control.parentElement)?.innerText,
+    ).slice(0, 500) || label(control)
+    if (!availableAccepts().length) {
       status('Blank state - no incoming invitations', 'blank')
       if (new URLSearchParams(location.search).has('cc_auto_invites'))
         await chrome.runtime.sendMessage({type: 'closeAutomationTab'})
       return
     }
-    for (const accept of accepts) {
-      if (!visible(accept)) continue
+    while (true) {
+      const accept = availableAccepts().find((control) => !attempted.has(invitationKey(control)))
+      if (!accept) break
       const card = accept.closest('li,article,[role=listitem]') || accept.parentElement
       const invitationLabel = label(accept)
-      const acceptsBefore = controls(document).filter((control) =>
-        /^(Accept(?:\s|$)|Accept .+ invitation)/i.test(label(control)),
-      ).length
-      const name = invitationLabel.match(/^Accept\s+(.+?)(?:[’']s)?\s+invitation/i)?.[1] ||
-        normalizeText(card?.innerText).replace(/\s+wants to connect.*$/i, '')
+      attempted.add(invitationKey(accept))
+      const acceptsBefore = availableAccepts().length
+      const name = invitationLabel
+        .replace(/^(?:Accept\s+)+/i, '')
+        .replace(/(?:[’']s)?\s+invitation.*$/i, '')
+        .trim() || normalizeText(card?.innerText).replace(/\s+wants to connect.*$/i, '')
       card?.scrollIntoView({block: 'center'})
       if (!(await countdown(`Accept ${name || 'invitation'}`))) return
-      if (!visible(accept) || !document.contains(accept)) continue
-      accept.click()
+      status(`Accept timer complete - rechecking ${name || 'invitation'}`, 'loading')
+      const liveAccept = availableAccepts().find((control) =>
+        visible(control) && label(control) === invitationLabel,
+      ) || availableAccepts().find((control) =>
+        visible(control) && name && label(control).replace(/^(?:Accept\s+)+/i, '')
+          .toLocaleLowerCase().startsWith(name.toLocaleLowerCase()),
+      )
+      if (!liveAccept || liveAccept.disabled) {
+        const reason = `LinkedIn replaced the Accept button and no enabled replacement was found for ${name || 'the invitation'}`
+        status(`Failure - ${reason}`, 'failure')
+        await api('/result', 'POST', {ok: false, kind: 'connection_accept', reason})
+        break
+      }
+      liveAccept.click()
       const deadline = Date.now() + 12000
       let confirmed = false
       let reason = 'LinkedIn did not confirm the invitation acceptance'
@@ -795,9 +845,7 @@
           break
         }
         const sameInvitation = controls(document).some((control) => label(control) === invitationLabel)
-        const acceptsAfter = controls(document).filter((control) =>
-          /^(Accept(?:\s|$)|Accept .+ invitation)/i.test(label(control)),
-        ).length
+        const acceptsAfter = availableAccepts().length
         if (!sameInvitation && acceptsAfter < acceptsBefore) {
           confirmed = true
           reason = `LinkedIn removed the accepted invitation${name ? ` for ${name}` : ''}`
@@ -810,6 +858,7 @@
       await api('/result', 'POST', {
         ok: confirmed,
         kind: confirmed ? 'connection_accept' : undefined,
+        actionId: `linkedin:connection_accept:${normalizeText(name || invitationLabel)}`,
         reason,
       })
       status(confirmed ? `Success - accepted ${name}` : `Failure - ${reason}`, confirmed ? 'success' : 'failure')

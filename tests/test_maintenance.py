@@ -11,12 +11,35 @@ from pathlib import Path
 from unittest.mock import patch
 
 import linkedin_bot
+import extension_server
 import manage
 import requests
 import reporting
 
 
 class MaintenanceTests(unittest.TestCase):
+    def test_confirmed_social_reply_is_normalized_for_selected_crm(self):
+        response = type("Response", (), {"ok": True, "status_code": 202})()
+        with patch("extension_server.requests.post", return_value=response) as post:
+            result = extension_server.deliver_crm_event(
+                {"enabled": True, "provider": "compatible", "webhookUrl": "https://crm.example/ingest", "apiToken": "token"},
+                {"eventType": "linkedin.reply.sent", "occurredAt": "2026-07-16T12:00:00Z", "channel": "linkedin", "contact": "Client Name", "inboundContext": "INBOUND: Can we talk?", "outboundMessage": "Yes.", "actionId": "linkedin:reply:1", "tasks": [{"title": "Follow up"}]},
+            )
+        self.assertTrue(result["delivered"])
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["contact"]["name"], "Client Name")
+        self.assertEqual(payload["conversation"]["channel"], "linkedin")
+        self.assertEqual(payload["tasks"][0]["title"], "Follow up")
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer token")
+
+    def test_all_enabled_inboxes_forward_confirmed_replies_to_crm(self):
+        inbox = Path("chrome_extension/inbox_content.js").read_text(encoding="utf-8")
+        whatsapp = Path("chrome_extension/whatsapp_content.js").read_text(encoding="utf-8")
+        for content in (inbox, whatsapp):
+            self.assertIn("/crm-event", content)
+            self.assertIn("settings.integrations", content)
+            self.assertIn("Follow up with", content)
+
     def test_comment_sanitizer_removes_narration_and_moshe_labels(self):
         cases = {
             'Here\'s a proposed comment:\n\n"Actual comment."': "Actual comment.",
@@ -48,6 +71,14 @@ class MaintenanceTests(unittest.TestCase):
                      "inbox_content.js"):
             content = (Path("chrome_extension") / name).read_text(encoding="utf-8")
             self.assertIn(f"const EXTENSION_BUILD = '{expected}'", content)
+
+    def test_version_flag_does_not_require_ollama(self):
+        with patch.object(sys, "argv", ["linkedin_bot.py", "--version"]), \
+                patch.object(linkedin_bot, "ollama") as model, \
+                patch("builtins.print") as output:
+            linkedin_bot.run()
+        model.assert_not_called()
+        output.assert_called_once_with(f"CodeCrafter Social Bridge {linkedin_bot.APP_VERSION}")
 
     def test_linkedin_connection_queue_and_confirmation_are_present(self):
         content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
@@ -117,6 +148,9 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("handleIncomingInvitations", content)
         self.assertIn("openIncomingInvitations", worker)
         self.assertIn("connection_accept", server)
+        self.assertIn("aria-label*='reply' i", content)
+        self.assertIn("data-placeholder*='reply' i", content)
+        self.assertIn("context: `${task.notificationText || ''}\\n${normalizeText(target.innerText)}`", content)
 
     def test_linkedin_inbox_scans_rows_and_requires_exact_outgoing_message(self):
         inbox = Path("chrome_extension/inbox_content.js").read_text(encoding="utf-8")
@@ -131,6 +165,8 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("periodInMinutes: 5", worker)
         self.assertIn("ccMessageAutomationTabs", worker)
         self.assertIn("ccLastLinkedInPriorityAt", worker)
+        self.assertIn("function activeConversation", inbox)
+        self.assertIn("Reading active", inbox)
 
     def test_linkedin_comment_duplicate_and_exact_confirmation_are_required(self):
         content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
@@ -367,6 +403,62 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("waitForExactOutgoingMessage", whatsapp)
         self.assertNotIn("confirmed = !text(input)", whatsapp)
         self.assertNotIn("type: 'leaveWhatsAppChat'", whatsapp)
+        self.assertIn("const recent = chatRows[0]", whatsapp)
+        self.assertIn("actionId: `whatsapp:reply:", whatsapp)
+        self.assertIn("document.execCommand('delete'", whatsapp)
+        self.assertIn("[aria-label='Send']", whatsapp)
+        self.assertNotIn("priorityActive", whatsapp)
+        self.assertNotIn("paused for a LinkedIn notification", whatsapp)
+        for token in ("claimTransaction", "ccWhatsAppSendTransactions", "sendStarted",
+                      "state: 'uncertain'", "sendButton", "[data-icon='send']",
+                      "Retry this message once", "clearFailedTransaction"):
+            self.assertIn(token, whatsapp)
+        self.assertIn("duplicate retry blocked", whatsapp)
+
+    def test_crm_provider_settings_and_confirmed_whatsapp_delivery_are_wired(self):
+        html = Path("chrome_extension/options.html").read_text(encoding="utf-8")
+        options = Path("chrome_extension/options.js").read_text(encoding="utf-8")
+        settings = Path("chrome_extension/settings.js").read_text(encoding="utf-8")
+        whatsapp = Path("chrome_extension/whatsapp_content.js").read_text(encoding="utf-8")
+        server = Path("extension_server.py").read_text(encoding="utf-8")
+        for provider in ("codecrafter", "creativecrm", "compatible", "custom"):
+            self.assertIn(provider, html + settings)
+        for field in ("crm-provider", "crm-webhook-url", "crm-api-token", "crm-enabled", "test-crm",
+                      "paste-crm-code", "clear-whatsapp-retries"):
+            self.assertIn(field, html + options)
+        for token in ("CCCRM1", "decodeSetupCode", "navigator.clipboard.readText"):
+            self.assertIn(token, options)
+        self.assertIn("if (confirmed && settings.integrations?.crm?.enabled)", whatsapp)
+        self.assertIn("/crm-event", whatsapp + server)
+        self.assertIn("deliver_crm_event", server)
+
+    def test_explicit_unanswered_inquiry_gets_fact_free_fallback(self):
+        context = "\n".join((
+            "INBOUND: Hey I want to hear more about websites that you've created 21:18",
+            "INBOUND: hello, i didnt get an answer? 01:04",
+            "INBOUND: Send me answer 01:32",
+        ))
+        with patch.object(linkedin_bot, "ollama", return_value=json.dumps({
+            "allowed": False, "reason": "no reply needed", "message": "",
+        })):
+            result = linkedin_bot.draft_inbox_reply("whatsapp", context)
+        self.assertTrue(result["allowed"])
+        self.assertIn("website", result["message"].lower())
+        self.assertEqual(result["review"]["reason"], "fact-free acknowledgement")
+
+    def test_hebrew_followup_uses_hebrew_and_call_context(self):
+        context = "INBOUND: אם זה משהו שמדבר אליך, אפשר לקפוץ לשיחה קצרה"
+        self.assertEqual(
+            linkedin_bot.safe_followup_reply(context),
+            "נשמע מעניין. בוא נקבע שיחה קצרה — מתי נוח לך?",
+        )
+
+    def test_linkedin_acceptance_re_resolves_replaced_button(self):
+        content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
+        self.assertIn("const liveAccept = availableAccepts().find", content)
+        self.assertIn("while (true)", content)
+        self.assertIn("replace(/^(?:Accept\\s+)+/i", content)
+        self.assertIn("Accept timer complete - rechecking", content)
 
     def test_imported_writing_style_is_tone_only(self):
         with patch.object(linkedin_bot, "ollama", side_effect=[
@@ -374,7 +466,7 @@ class MaintenanceTests(unittest.TestCase):
             json.dumps({"pass": True, "reason": "specific and safe", "confidence": 95}),
         ]) as model:
             result = linkedin_bot.draft_inbox_reply(
-                "whatsapp", "INBOUND: Can you check this?",
+                "whatsapp", "INBOUND: The document is attached.",
                 {"sourceType": "samples", "content": "Short sentences. Warm and direct."},
             )
         self.assertTrue(result["allowed"])
@@ -466,17 +558,21 @@ class MaintenanceTests(unittest.TestCase):
             root = Path(directory)
             (root / "linkedin_metrics.jsonl").write_text(
                 '\n'.join(json.dumps(row) for row in (
-                    {"at": "2026-07-15T10:00:00", "event": "confirmed_like"},
-                    {"at": "2026-07-15T11:00:00", "event": "confirmed_facebook_comment"},
+                    {"at": "2026-07-15T10:00:00", "event": "confirmed_like",
+                     "verified": True, "action_id": "like|linkedin:post:1"},
+                    {"at": "2026-07-15T11:00:00", "event": "confirmed_facebook_comment",
+                     "verified": True, "action_id": "facebook_comment|facebook:post:1"},
                 )) + '\n', encoding="utf-8")
             snapshots = []
             for day, social, sessions in ((13, 2, 10), (14, 4, 20), (15, 6, 30)):
                 captured = f"2026-07-{day:02d}T12:00:00"
                 snapshots.extend((
                     {"captured_at": captured, "source": "linkedin",
-                     "metrics": {"likes": social}},
+                     "metrics": {"likes": social},
+                     "verification": {"status": "verified", "method": "self_profile_dom"}},
                     {"captured_at": captured, "source": "ga4:code-site.tech",
-                     "metrics": {"sessions": sessions}},
+                     "metrics": {"sessions": sessions},
+                     "verification": {"status": "verified", "method": "ga4_data_api"}},
                 ))
             (root / "account_metrics.jsonl").write_text(
                 '\n'.join(json.dumps(row) for row in snapshots) + '\n', encoding="utf-8")
@@ -487,6 +583,23 @@ class MaintenanceTests(unittest.TestCase):
             self.assertEqual(report["correlation"]["coefficient"], 1.0)
             self.assertIn("code-site.tech", report["website_analytics"])
             self.assertIn("Social + Website Report", reporting.render_html(report))
+            self.assertIn("Automation activity", reporting.render_html(report))
+
+    def test_report_excludes_legacy_unverified_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "linkedin_metrics.jsonl").write_text(
+                json.dumps({"at": "2026-07-16T10:00:00", "event": "confirmed_like"}) + "\n",
+                encoding="utf-8",
+            )
+            (root / "account_metrics.jsonl").write_text(
+                json.dumps({"captured_at": "2026-07-16T10:00:00", "source": "linkedin",
+                            "metrics": {"followers": 469750}}) + "\n",
+                encoding="utf-8",
+            )
+            report = reporting.build_report(root, datetime(2026, 7, 16, 12, 0, 0))
+        self.assertEqual(report["windows"]["day"]["actions"], {})
+        self.assertEqual(report["account_snapshots"], {})
 
     def test_snapshot_metrics_support_powershell_safe_key_values(self):
         self.assertEqual(manage.parse_metrics("sessions=24,views=25"),
@@ -499,6 +612,8 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("/account-snapshot", metrics)
         self.assertIn("profile viewers", metrics)
         self.assertIn("post impressions", metrics)
+        self.assertIn("self_network_dom", metrics)
+        self.assertIn("Show\\s+", metrics)
         self.assertIn("document.querySelector('header')", metrics)
         self.assertNotIn("[role='article']", metrics)
 

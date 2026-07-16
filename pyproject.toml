@@ -1,6 +1,6 @@
 [project]
 name = "linkedin-engagement-copilot"
-version = "3.15.3"
+version = "3.18.1"
 description = "Local Ollama-powered, observable LinkedIn engagement copilot"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,6 +9,9 @@ dependencies = [
   "python-dotenv==1.1.1",
   "google-analytics-data==0.23.0",
 ]
+
+[project.optional-dependencies]
+package = ["pyinstaller==6.21.0"]
 
 [tool.ruff]
 line-length = 100

@@ -34,5 +34,7 @@ def collect_ga4(root: Path, days: int = 365) -> list[dict]:
                        "views": int(row.metric_values[3].value or 0),
                        "property_id": int(property_id)}
             collected.append(record_snapshot(root, f"ga4:{domain}", metrics,
-                                             day.replace(hour=23, minute=59).isoformat()))
+                                             day.replace(hour=23, minute=59).isoformat(),
+                                             {"status": "verified", "method": "ga4_data_api",
+                                              "property_id": int(property_id)}))
     return collected
