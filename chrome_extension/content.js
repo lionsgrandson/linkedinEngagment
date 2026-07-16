@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.18.1'
-  const EXTENSION_BUILD = '5cf01b8aac28'
+  const EXTENSION_VERSION = '3.18.3'
+  const EXTENSION_BUILD = '6ab978f63b59'
   let paused = false
   let busy = false
   const processed = new Set()

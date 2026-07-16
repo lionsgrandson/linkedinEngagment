@@ -195,8 +195,20 @@
       }
     }
     const decodeSetupCode = (value) => {
-      const encoded = String(value || '').trim().replace(/^CCCRM1\./i, '')
-      const decoded = JSON.parse(atob(encoded))
+      const copied = String(value || '').trim()
+      if (!copied) throw new Error('The clipboard is empty. Copy the setup code from CodeCrafter CRM and try again.')
+      let decoded
+      try {
+        if (copied.startsWith('{')) {
+          decoded = JSON.parse(copied)
+        } else {
+          let encoded = copied.replace(/^CCCRM1\./i, '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')
+          encoded += '='.repeat((4 - encoded.length % 4) % 4)
+          decoded = JSON.parse(atob(encoded))
+        }
+      } catch {
+        throw new Error('The clipboard does not contain a complete setup code. Copy it again from CodeCrafter CRM → Settings → Integrations.')
+      }
       if (decoded?.v !== 1 || decoded.provider !== 'codecrafter' ||
           !/^https:\/\//i.test(decoded.webhookUrl || '') || !String(decoded.apiToken || '').startsWith('cccrm_')) {
         throw new Error('This is not a valid CodeCrafter CRM setup code.')

@@ -2,8 +2,8 @@
   if (location.hostname !== 'web.whatsapp.com' || window.__codeCrafterWhatsAppBridge) return
   window.__codeCrafterWhatsAppBridge = true
 
-  const EXTENSION_VERSION = '3.18.1'
-  const EXTENSION_BUILD = '5cf01b8aac28'
+  const EXTENSION_VERSION = '3.18.3'
+  const EXTENSION_BUILD = '6ab978f63b59'
   const processed = new Set()
   let busy = false
   let activeTransaction = ''
@@ -233,7 +233,14 @@
     return {contact: title, isGroup}
   }
 
-  function setEditorText(input, message) {
+  const normalizeEditorText = (value) => String(value || '')
+    .normalize('NFKC')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g, '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  async function setEditorText(input, message) {
     const value = String(message || '')
     input.focus()
     const selection = window.getSelection()
@@ -248,13 +255,22 @@
     }))
     if (value) {
       input.focus()
-      document.execCommand('insertText', false, value)
-      if (text(input) !== value.replace(/\s+/g, ' ').trim()) input.textContent = value
+      const inserted = document.execCommand('insertText', false, value)
+      if (!inserted && !normalizeEditorText(input.innerText || input.textContent)) input.textContent = value
       input.dispatchEvent(new InputEvent('input', {
         bubbles: true, inputType: 'insertText', data: value,
       }))
     }
-    return text(input) === value.replace(/\s+/g, ' ').trim()
+    const expected = normalizeEditorText(value)
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline) {
+      const liveInput = editor()
+      const candidates = [...new Set([input, liveInput].filter(Boolean))]
+      if (candidates.some((node) => normalizeEditorText(node.innerText || node.textContent) === expected)) return true
+      if (sendButton() && candidates.some((node) => normalizeEditorText(node.innerText || node.textContent))) return true
+      await sleep(100)
+    }
+    return false
   }
 
   function exactOutgoingMessage(message) {
@@ -384,7 +400,7 @@
       }
       const input = editor()
       if (!input) throw new Error('WhatsApp message editor not found')
-      if (!setEditorText(input, response.data.message))
+      if (!(await setEditorText(input, response.data.message)))
         throw new Error('WhatsApp editor did not retain the drafted reply')
       await countdown(automaticClient)
       let send = null

@@ -411,7 +411,8 @@ class MaintenanceTests(unittest.TestCase):
         self.assertNotIn("paused for a LinkedIn notification", whatsapp)
         for token in ("claimTransaction", "ccWhatsAppSendTransactions", "sendStarted",
                       "state: 'uncertain'", "sendButton", "[data-icon='send']",
-                      "Retry this message once", "clearFailedTransaction"):
+                      "Retry this message once", "clearFailedTransaction",
+                      "normalizeEditorText", "await setEditorText", "sendButton() && candidates.some"):
             self.assertIn(token, whatsapp)
         self.assertIn("duplicate retry blocked", whatsapp)
 
@@ -426,7 +427,8 @@ class MaintenanceTests(unittest.TestCase):
         for field in ("crm-provider", "crm-webhook-url", "crm-api-token", "crm-enabled", "test-crm",
                       "paste-crm-code", "clear-whatsapp-retries"):
             self.assertIn(field, html + options)
-        for token in ("CCCRM1", "decodeSetupCode", "navigator.clipboard.readText"):
+        for token in ("CCCRM1", "decodeSetupCode", "navigator.clipboard.readText",
+                      "replace(/-/g, '+')", "complete setup code"):
             self.assertIn(token, options)
         self.assertIn("if (confirmed && settings.integrations?.crm?.enabled)", whatsapp)
         self.assertIn("/crm-event", whatsapp + server)

@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterFacebookBridge || location.pathname.startsWith('/messages')) return
   window.__codeCrafterFacebookBridge = true
-  const EXTENSION_VERSION = '3.18.1'
-  const EXTENSION_BUILD = '5cf01b8aac28'
+  const EXTENSION_VERSION = '3.18.3'
+  const EXTENSION_BUILD = '6ab978f63b59'
   const processed = new Set()
   let profileState = null
   let busy = false

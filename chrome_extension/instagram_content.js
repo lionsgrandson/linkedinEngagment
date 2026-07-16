@@ -2,8 +2,8 @@
   if (window.__codeCrafterInstagramBridge || location.pathname.startsWith('/direct')) return
   window.__codeCrafterInstagramBridge = true
 
-  const EXTENSION_VERSION = '3.18.1'
-  const EXTENSION_BUILD = '5cf01b8aac28'
+  const EXTENSION_VERSION = '3.18.3'
+  const EXTENSION_BUILD = '6ab978f63b59'
   const processedPosts = new Set()
   const viewedStoryFrames = new Set()
   const PROFILE_STATE_KEY = 'ccInstagramProfileBatch'
