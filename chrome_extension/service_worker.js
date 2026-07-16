@@ -371,7 +371,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     method: message.method || "GET",
     headers: {"Content-Type": "application/json"},
     body: message.body ? JSON.stringify(message.body) : undefined
-  }).then(async response => sendResponse({ok: response.ok, data: await response.json()}))
+  }).then(async response => sendResponse({
+    ok: response.ok, status: response.status, data: await response.json(),
+  }))
     .catch(error => sendResponse({ok: false, error: String(error)}));
   return true;
 });

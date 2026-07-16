@@ -224,13 +224,30 @@
       }
       crmState.textContent = 'Loading — testing the CRM connection…'
       crmState.dataset.phase = 'loading'
+      const expectedVersion = chrome.runtime.getManifest().version
+      const bridge = await chrome.runtime.sendMessage({
+        type: 'localApi', path: '/', method: 'GET',
+      })
+      if (!bridge?.ok) {
+        crmState.textContent = 'Failure — CodeCrafter Client is not running. Start the desktop app, then try again.'
+        crmState.dataset.phase = 'failure'
+        return false
+      }
+      const bridgeVersion = String(bridge.data?.version || 'unknown')
+      if (bridgeVersion !== expectedVersion) {
+        crmState.textContent = `Failure — desktop bridge ${bridgeVersion} is still running. Close it and start CodeCrafter Client ${expectedVersion}, then try again.`
+        crmState.dataset.phase = 'failure'
+        return false
+      }
       const result = await chrome.runtime.sendMessage({
         type: 'localApi', path: '/crm-test', method: 'POST', body: {crm: settings.integrations.crm},
       })
       const connected = Boolean(result?.ok && result.data?.delivered)
       crmState.textContent = connected
         ? 'Success — CodeCrafter CRM is connected and ready.'
-        : `Failure — ${result?.data?.error || result?.error || 'the CRM rejected the connection test.'}`
+        : result?.status === 404 || /not found/i.test(result?.data?.error || '')
+          ? `Failure — CodeCrafter Client ${expectedVersion} must be restarted before CRM setup can finish.`
+          : `Failure — ${result?.data?.error || result?.error || 'the CRM rejected the connection test.'}`
       crmState.dataset.phase = connected ? 'success' : 'failure'
       return connected
     }

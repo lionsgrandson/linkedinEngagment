@@ -430,8 +430,10 @@ class MaintenanceTests(unittest.TestCase):
                       "paste-crm-code", "clear-whatsapp-retries"):
             self.assertIn(field, html + options)
         for token in ("CCCRM1", "decodeSetupCode", "navigator.clipboard.readText",
-                      "replace(/-/g, '+')", "complete setup code"):
+                      "replace(/-/g, '+')", "complete setup code", "bridgeVersion !== expectedVersion",
+                      "CodeCrafter Client is not running", "must be restarted"):
             self.assertIn(token, options)
+        self.assertIn("status: response.status", Path("chrome_extension/service_worker.js").read_text(encoding="utf-8"))
         self.assertIn("if (confirmed && settings.integrations?.crm?.enabled)", whatsapp)
         self.assertIn("/crm-event", whatsapp + server)
         self.assertIn("deliver_crm_event", server)
