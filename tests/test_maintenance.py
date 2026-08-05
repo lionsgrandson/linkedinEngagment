@@ -40,6 +40,8 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("commentEveryOrganicPost", backend)
         self.assertIn("first visible non-sponsored post", backend)
         self.assertIn("!post.sponsored", backend)
+        self.assertIn("relatedWordOverlap", backend)
+        self.assertIn("shared concrete terms after reviewer retries", backend)
         self.assertIn("candidatePosts", Path("chrome_extension/content.js").read_text(encoding="utf-8"))
         self.assertIn("chrome.runtime.getURL('dashboard.html')", Path("chrome_extension/options.js").read_text(encoding="utf-8"))
         self.assertTrue(Path("chrome_extension/dashboard.js").exists())

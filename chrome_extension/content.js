@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.20.9'
-  const EXTENSION_BUILD = 'b1f53146740d'
+  const EXTENSION_VERSION = '3.20.10'
+  const EXTENSION_BUILD = '4c4b609b3dee'
   let paused = false
   let busy = false
   const processed = new Set()
@@ -1108,7 +1108,7 @@
         .forEach((item) => processed.add(item.key))
       status(
         info.action
-          ? `Ollama selected post ${info.action.index + 1} of ${info.received} — ${info.action.comment ? info.action.draftReason : 'no approved comment draft'}`
+          ? `Ollama selected post ${info.action.index + 1} of ${info.received} — ${info.action.draftReason || 'no approved comment draft'}`
           : `Scanned ${info.received} posts — ${info.last_reason || 'none relevant yet'}`,
       )
       const actionResult = info.action ? await execute(info.action) : null

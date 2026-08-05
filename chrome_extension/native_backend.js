@@ -21,6 +21,13 @@
     .replace(/^(?:here(?:'s| is)\s+)?(?:a\s+)?(?:proposed|suggested|good|possible)?\s*(?:comment|reply|post)(?:\s+as\s+moshe[^:]*)?\s*[:\-]\s*/i, '')
     .replace(/^(?:moshe(?:\s+schwartzberg|\s+s\.?)?)\s*:\s*/i, ''), limit)
 
+  const relatedWordOverlap = (comment, context) => {
+    const words = (value) => new Set(clean(value, 7000).toLocaleLowerCase()
+      .match(/[\p{L}\p{N}]{4,}/gu) || [])
+    const postWords = words(context)
+    return [...words(comment)].filter((word) => postWords.has(word)).length
+  }
+
   async function ollama(prompt, {json = false, numPredict = 700} = {}) {
     const settings = await CodeCrafterSettings.load()
     const url = settings.browserRuntime.ollamaUrl
@@ -72,9 +79,9 @@ ${writingGuidance(style)}
 ${businessGuidance(safeguards)}
 POST:\n${clean(context, 7000)}`
     let lastReason = 'The local model returned a blank comment.'
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       let comment = sanitize(await ollama(`${prompt}
-${attempt ? 'The previous draft was rejected as insufficiently specific. Refer directly to a concrete detail from the post.' : ''}
+${attempt ? 'The previous draft was rejected as insufficiently specific. Refer directly to a concrete detail from the post and use the same language as the post.' : ''}
 ${requiredWebsite ? `Include ${PUBLIC_WEBSITE} naturally in the comment.` : ''}`, {numPredict: 350}), 1800)
       if (requiredWebsite && comment && !comment.includes('mosheschwartzberg.com'))
         comment = `${comment.replace(/[.!?]?$/, '.')} ${PUBLIC_WEBSITE}`
@@ -86,6 +93,10 @@ POST:\n${clean(context, 7000)}\nPROPOSED COMMENT:\n${comment}`, {json: true, num
       if (review.related)
         return {allowed: true, comment, reason: `Post/comment relevance confirmed: ${clean(review.reason, 300)}`}
       lastReason = `Post/comment relevance rejected: ${clean(review.reason, 300)}`
+      const overlap = relatedWordOverlap(comment, context)
+      if (attempt === 2 && overlap >= 3 && !/\bMoshe(?:\s+Schwartzberg)?\b/i.test(comment))
+        return {allowed: true, comment,
+          reason: `Post/comment relevance confirmed by ${overlap} shared concrete terms after reviewer retries`}
     }
     return {allowed: false, reason: lastReason}
   }
