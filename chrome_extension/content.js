@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.20.8'
-  const EXTENSION_BUILD = '6df01dcb2ab1'
+  const EXTENSION_VERSION = '3.20.9'
+  const EXTENSION_BUILD = 'b1f53146740d'
   let paused = false
   let busy = false
   const processed = new Set()
@@ -344,6 +344,7 @@
             "button[aria-pressed='true'],button[aria-label*='unreact'],button[aria-label='Reaction button state: Like']",
           ) !== null,
         alreadyCommented: hasOwnComment(node),
+        sponsored: /\b(?:Promoted|Sponsored)\b/i.test(node.innerText || ''),
         mediaUrls: [...node.querySelectorAll('img,video')]
           .filter((element) => element.tagName === 'VIDEO' || element.naturalWidth >= 180)
           .map((element) => element.currentSrc || element.src || element.poster || '')
@@ -368,7 +369,7 @@
       .filter(
         (item) =>
           item.text.length > 30 &&
-          !/\bPromoted\b/i.test(item.text) &&
+          !item.sponsored &&
           !processed.has(item.key),
       )
       .slice(0, 8)
@@ -1080,6 +1081,7 @@
         features: {
           likes: config.likes,
           comments: config.comments,
+          commentEveryOrganicPost: config.commentEveryOrganicPost,
           connections: config.connections,
           imageRecognition: config.imageRecognition,
         },

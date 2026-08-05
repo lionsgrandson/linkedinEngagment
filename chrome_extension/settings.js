@@ -34,6 +34,7 @@
         enabled: true,
         likes: true,
         comments: true,
+        commentEveryOrganicPost: true,
         connections: true,
         incomingInvites: true,
         notificationReplies: true,

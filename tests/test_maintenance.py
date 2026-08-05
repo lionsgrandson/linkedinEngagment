@@ -37,6 +37,9 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("Use semantic meaning, not exact keyword matching", backend)
         self.assertNotIn("Both writing style and verified business information must be filled", backend)
         self.assertIn("draftReason", backend)
+        self.assertIn("commentEveryOrganicPost", backend)
+        self.assertIn("first visible non-sponsored post", backend)
+        self.assertIn("!post.sponsored", backend)
         self.assertIn("candidatePosts", Path("chrome_extension/content.js").read_text(encoding="utf-8"))
         self.assertIn("chrome.runtime.getURL('dashboard.html')", Path("chrome_extension/options.js").read_text(encoding="utf-8"))
         self.assertTrue(Path("chrome_extension/dashboard.js").exists())
@@ -53,6 +56,7 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("ccLastLinkedInScheduledPostAt", worker)
         self.assertIn("cc3203LinkedInScheduleActivated", worker)
         self.assertIn("cc3207LinkedInCommentsActivated", worker)
+        self.assertIn("cc3209EveryOrganicLinkedInCommentActivated", worker)
         self.assertIn("runScheduledLinkedInPost", linkedin)
         self.assertIn("draft-linkedin-post", linkedin)
         for token in ("groupMonitoring", "groupUrls", "groupCommentDelaySeconds"):

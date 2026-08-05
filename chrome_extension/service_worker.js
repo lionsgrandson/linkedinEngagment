@@ -98,10 +98,22 @@ const activateRequestedPopupOnce = async () => {
   await chrome.storage.local.set({[migrationKey]: true});
 };
 
+const activateEveryOrganicLinkedInCommentOnce = async () => {
+  const migrationKey = "cc3209EveryOrganicLinkedInCommentActivated";
+  if ((await chrome.storage.local.get(migrationKey))[migrationKey]) return;
+  const settings = await CodeCrafterSettings.load();
+  settings.platforms.linkedin.enabled = true;
+  settings.platforms.linkedin.comments = true;
+  settings.platforms.linkedin.commentEveryOrganicPost = true;
+  await CodeCrafterSettings.save(settings);
+  await chrome.storage.local.set({[migrationKey]: true});
+};
+
 const configureBrowserAutomation = async () => {
   await activateRequestedLinkedInScheduleOnce();
   await activateRequestedLinkedInCommentsOnce();
   await activateRequestedPopupOnce();
+  await activateEveryOrganicLinkedInCommentOnce();
   chrome.alarms.create("ccFacebookGroups", {periodInMinutes: 1});
   chrome.alarms.create("ccLinkedInScheduledPosts", {periodInMinutes: 5});
   await ensureFacebookGroupTabs();

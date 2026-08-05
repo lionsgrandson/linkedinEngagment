@@ -71,17 +71,23 @@ ${intent ? `TARGET INTENT:\n${clean(intent, 5000)}\n` : ''}
 ${writingGuidance(style)}
 ${businessGuidance(safeguards)}
 POST:\n${clean(context, 7000)}`
-    let comment = sanitize(await ollama(`${prompt}\n${requiredWebsite ? `Include ${PUBLIC_WEBSITE} naturally in the comment.` : ''}`, {numPredict: 350}), 1800)
-    if (requiredWebsite && comment && !comment.includes('mosheschwartzberg.com'))
-      comment = `${comment.replace(/[.!?]?$/, '.')} ${PUBLIC_WEBSITE}`
-    if (!comment) return {allowed: false, reason: 'The local model returned a blank comment.'}
-    const review = parseJson(await ollama(`Check whether the proposed comment responds specifically to the actual post, is written by Moshe in first person, and does not introduce an unrelated pitch.
+    let lastReason = 'The local model returned a blank comment.'
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let comment = sanitize(await ollama(`${prompt}
+${attempt ? 'The previous draft was rejected as insufficiently specific. Refer directly to a concrete detail from the post.' : ''}
+${requiredWebsite ? `Include ${PUBLIC_WEBSITE} naturally in the comment.` : ''}`, {numPredict: 350}), 1800)
+      if (requiredWebsite && comment && !comment.includes('mosheschwartzberg.com'))
+        comment = `${comment.replace(/[.!?]?$/, '.')} ${PUBLIC_WEBSITE}`
+      if (!comment) continue
+      const review = parseJson(await ollama(`Check whether the proposed comment responds specifically to the actual post, is written by Moshe in first person, and does not introduce an unrelated pitch.
 Reject a comment that describes Moshe in third person, promotes services when the post did not ask for help, or could be pasted under an unrelated post.
 Return JSON only: {"related":true|false,"reason":"short evidence"}.
 POST:\n${clean(context, 7000)}\nPROPOSED COMMENT:\n${comment}`, {json: true, numPredict: 180}))
-    return review.related
-      ? {allowed: true, comment, reason: `Post/comment relevance confirmed: ${clean(review.reason, 300)}`}
-      : {allowed: false, reason: `Post/comment relevance rejected: ${clean(review.reason, 300)}`}
+      if (review.related)
+        return {allowed: true, comment, reason: `Post/comment relevance confirmed: ${clean(review.reason, 300)}`}
+      lastReason = `Post/comment relevance rejected: ${clean(review.reason, 300)}`
+    }
+    return {allowed: false, reason: lastReason}
   }
 
   async function handle(path, method = 'GET', body = {}) {
@@ -169,9 +175,13 @@ ${businessGuidance(settings.replySafeguards)}`
       const posts = Array.isArray(body.posts) ? body.posts.slice(0, 8) : []
       if (!posts.length) return {received: 0, checked: 0, action: null, last_reason: 'no visible posts'}
       const topics = Array.isArray(body.topics) ? body.topics : []
-      const eligible = posts.map((post, index) => ({post, index})).filter(({post}) => !post.alreadyCommented && clean(post.text, 5000))
+      const features = body.features || {}
+      const eligible = posts.map((post, index) => ({post, index})).filter(({post}) =>
+        !post.sponsored && !post.alreadyCommented && clean(post.text, 5000))
       if (!eligible.length) return {received: posts.length, checked: posts.length, action: null, last_reason: 'no uncommented visible post'}
-      const selection = parseJson(await ollama(`Choose the single LinkedIn post where a specific, useful comment from Moshe would be most relevant.
+      const selection = features.commentEveryOrganicPost !== false
+        ? {index: eligible[0].index, score: 100, reason: 'first visible non-sponsored post'}
+        : parseJson(await ollama(`Choose the single LinkedIn post where a specific, useful comment from Moshe would be most relevant.
 Use semantic meaning, not exact keyword matching. Reject job-seeker spam, unrelated promotions, politics outside the configured topics, and posts where a comment would add no value.
 Return JSON only: {"index":number,"score":0-100,"reason":"specific reason"}. Use index -1 when none is at least 60/100 relevant.
 CONFIGURED TOPICS:\n${topics.join(', ') || 'web development, technology, business, and personal growth'}
@@ -181,7 +191,6 @@ POSTS:\n${eligible.map(({post, index}) => `[${index}] ${clean(post.text, 1800)}`
         return {received: posts.length, checked: posts.length, action: null,
           last_reason: `semantic review found no suitable post: ${clean(selection.reason, 300) || 'below relevance threshold'}`}
       const item = posts[index]
-      const features = body.features || {}
       const commentResult = features.comments === false ? {allowed: false} : await draftSocialComment(
         'LinkedIn', item.text, body.writingStyle || settings.writingStyle,
         body.safeguards || settings.replySafeguards,
