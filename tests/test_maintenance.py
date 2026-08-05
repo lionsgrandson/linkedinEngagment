@@ -18,6 +18,53 @@ import reporting
 
 
 class MaintenanceTests(unittest.TestCase):
+    def test_browser_only_runtime_uses_saved_style_and_business_context(self):
+        backend = Path("chrome_extension/native_backend.js").read_text(encoding="utf-8")
+        worker = Path("chrome_extension/service_worker.js").read_text(encoding="utf-8")
+        manifest = json.loads(Path("chrome_extension/manifest.json").read_text(encoding="utf-8"))
+        self.assertIn('importScripts("native_backend.js")', worker)
+        self.assertIn("CodeCrafterNativeBackend.handle", worker)
+        self.assertNotIn("127.0.0.1:8765${message.path}", worker)
+        self.assertIn("WRITING INSTRUCTIONS", backend)
+        self.assertIn("VERIFIED BUSINESS INFORMATION", backend)
+        self.assertIn("/settings-audit", backend)
+        self.assertIn("http://127.0.0.1:11434/*", manifest["host_permissions"])
+        self.assertIn("https://mosheschwartzberg.com", backend)
+        self.assertIn("Post/comment relevance confirmed", backend)
+        self.assertIn("Never refer to Moshe Schwartzberg in third person", backend)
+        self.assertIn("promotes services when the post did not ask for help", backend)
+        self.assertIn("qwen3.5:9b", Path("chrome_extension/settings.js").read_text(encoding="utf-8"))
+        self.assertIn("Use semantic meaning, not exact keyword matching", backend)
+        self.assertNotIn("Both writing style and verified business information must be filled", backend)
+        self.assertIn("draftReason", backend)
+        self.assertIn("candidatePosts", Path("chrome_extension/content.js").read_text(encoding="utf-8"))
+        self.assertIn("chrome.runtime.getURL('dashboard.html')", Path("chrome_extension/options.js").read_text(encoding="utf-8"))
+        self.assertTrue(Path("chrome_extension/dashboard.js").exists())
+
+    def test_linkedin_three_day_schedule_and_facebook_group_monitoring_are_browser_owned(self):
+        settings = Path("chrome_extension/settings.js").read_text(encoding="utf-8")
+        worker = Path("chrome_extension/service_worker.js").read_text(encoding="utf-8")
+        linkedin = Path("chrome_extension/content.js").read_text(encoding="utf-8")
+        facebook = Path("chrome_extension/facebook_content.js").read_text(encoding="utf-8")
+        options = Path("chrome_extension/options.html").read_text(encoding="utf-8")
+        for token in ("scheduledPosts", "postEveryDays: 3", "postHour"):
+            self.assertIn(token, settings)
+        self.assertIn("ccLinkedInScheduledPosts", worker)
+        self.assertIn("ccLastLinkedInScheduledPostAt", worker)
+        self.assertIn("cc3203LinkedInScheduleActivated", worker)
+        self.assertIn("cc3207LinkedInCommentsActivated", worker)
+        self.assertIn("runScheduledLinkedInPost", linkedin)
+        self.assertIn("draft-linkedin-post", linkedin)
+        for token in ("groupMonitoring", "groupUrls", "groupCommentDelaySeconds"):
+            self.assertIn(token, settings)
+        self.assertIn("ccFacebookGroups", worker)
+        self.assertIn("runFacebookGroupMonitor", facebook)
+        self.assertIn("draft-facebook-group-comment", facebook)
+        self.assertIn("candidate.ageSeconds <= 120", facebook)
+        self.assertIn("staleUnseen", facebook)
+        self.assertIn("data-ad-rendering-role='story_message'", facebook)
+        self.assertIn("facebook-group-urls", options)
+
     def test_confirmed_social_reply_is_normalized_for_selected_crm(self):
         response = type("Response", (), {"ok": True, "status_code": 202})()
         with patch("extension_server.requests.post", return_value=response) as post:
@@ -49,6 +96,8 @@ class MaintenanceTests(unittest.TestCase):
             'Moshe Schwartzberg: "Direct comment."': "Direct comment.",
             'Moshe S: Another direct comment.': "Another direct comment.",
             'Comment as Moshe: No label remains.': "No label remains.",
+            'A good response as Moshe would be: Specific answer.': "Specific answer.",
+            'A good response as Moshe': "",
         }
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
@@ -118,15 +167,89 @@ class MaintenanceTests(unittest.TestCase):
     def test_notification_reply_is_drafted_and_reviewed(self):
         with patch.object(linkedin_bot, "ollama", side_effect=[
             json.dumps({"allowed": True, "reason": "answers the question",
-                        "reply": "That tradeoff is exactly the interesting part."}),
+                        "reply": "How that implementation scales is exactly the interesting tradeoff."}),
             json.dumps({"pass": True, "reason": "specific and natural", "confidence": 92}),
-        ]):
+        ]) as model:
             result = linkedin_bot.draft_notification_reply(
-                "Dana asked whether the simpler implementation scales.",
+                "Moshe: Simpler systems are easier to maintain.\nDana: But does that implementation scale?",
                 "Dana replied to your comment",
+                "But does that implementation scale?",
             )
         self.assertTrue(result["allowed"])
-        self.assertEqual(result["reply"], "That tradeoff is exactly the interesting part.")
+        self.assertEqual(result["reply"], "How that implementation scales is exactly the interesting tradeoff.")
+        self.assertIn("LATEST REPLY", model.call_args_list[0].args[0])
+        self.assertIn("But does that implementation scale?", model.call_args_list[0].args[0])
+        self.assertIn("But does that implementation scale?", model.call_args_list[1].args[0])
+        self.assertIn("Simpler systems are easier to maintain.", model.call_args_list[1].args[0])
+
+    def test_notification_reply_rejects_invented_experience_and_off_context_text(self):
+        self.assertIn("invented personal", linkedin_bot.notification_reply_violation(
+            "How does it scale?", "I've found that our clients scale it easily.",
+        ))
+        self.assertIn("exact target", linkedin_bot.notification_reply_violation(
+            "How does the database scale?", "Thanks for sharing this update.",
+        ))
+        self.assertEqual(linkedin_bot.notification_reply_violation(
+            "How does the database scale?", "A modular database design can make scaling easier.",
+        ), "")
+
+    def test_substantive_linkedin_reply_is_retried_when_model_declines(self):
+        thread = (
+            "Moshe Schwartzberg: How can brands keep positioning consistent across channels?\n"
+            "Bernard Ablola: Ask AI the same questions prospects ask and look for gaps."
+        )
+        with patch.object(linkedin_bot, "ollama", side_effect=[
+            json.dumps({"allowed": False, "reason": "no reply needed", "reply": ""}),
+            json.dumps({"allowed": True, "reason": "continued active thread",
+                        "reply": "Using prospect questions as an audit is practical. "
+                                 "Which gap usually appears first for you?"}),
+            json.dumps({"pass": True, "reason": "specific and truthful", "confidence": 96}),
+        ]):
+            result = linkedin_bot.draft_notification_reply(
+                thread, "Bernard replied to your comment",
+                "Ask AI the same questions prospects ask and look for gaps.",
+            )
+        self.assertTrue(result["allowed"])
+        self.assertIn("Which gap", result["reply"])
+
+    def test_reaction_only_notification_uses_visible_thread_instead_of_stopping(self):
+        self.assertTrue(linkedin_bot.reaction_only_reply("Moshe Schwartzberg 💯"))
+        self.assertFalse(linkedin_bot.reaction_only_reply("Moshe, trust is the real advantage."))
+        thread = (
+            "Moshe Schwartzberg: True trust marketing extends beyond on-page SEO.\n"
+            "Mahnoor Idrees: Moshe Schwartzberg 💯"
+        )
+        with patch.object(linkedin_bot, "ollama", side_effect=[
+            json.dumps({"allowed": False, "reason": "no substantive text", "reply": ""}),
+            json.dumps({"allowed": True, "reason": "continues the thread",
+                        "reply": "Exactly, Mahnoor—the trust layer is what makes visibility compound."}),
+        ]) as model:
+            result = linkedin_bot.draft_notification_reply(
+                thread, "Mahnoor mentioned you", "Moshe Schwartzberg 💯",
+            )
+        self.assertTrue(result["allowed"])
+        self.assertIn("trust layer", result["reply"])
+        self.assertIn("reacted to Moshe", model.call_args_list[1].args[0])
+        self.assertIn("True trust marketing", model.call_args_list[1].args[0])
+
+    def test_generic_reaction_reply_is_rewritten_from_the_exact_thread(self):
+        thread = (
+            "Moshe Schwartzberg: Trust marketing extends beyond on-page SEO.\n"
+            "Mahnoor Idrees: Moshe Schwartzberg 💯"
+        )
+        with patch.object(linkedin_bot, "ollama", side_effect=[
+            json.dumps({"allowed": False, "reason": "reaction only", "reply": ""}),
+            json.dumps({"allowed": True, "reason": "acknowledges reaction",
+                        "reply": "Glad to connect."}),
+            json.dumps({"allowed": True, "reason": "continues the exact point",
+                        "reply": "Exactly, Mahnoor—the trust layer turns visibility into credibility."}),
+        ]) as model:
+            result = linkedin_bot.draft_notification_reply(
+                thread, "Mahnoor mentioned you", "Moshe Schwartzberg 💯",
+            )
+        self.assertTrue(result["allowed"])
+        self.assertIn("trust layer", result["reply"])
+        self.assertIn("generic greeting", model.call_args_list[2].args[0])
 
     def test_daily_notification_and_accepted_connection_flows_are_present(self):
         content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
@@ -150,7 +273,18 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("connection_accept", server)
         self.assertIn("aria-label*='reply' i", content)
         self.assertIn("data-placeholder*='reply' i", content)
-        self.assertIn("context: `${task.notificationText || ''}\\n${normalizeText(target.innerText)}`", content)
+        self.assertIn("const latestReply = commentBody(target)", content)
+        self.assertIn("commentAuthor(root)", content)
+        self.assertIn("commentUrn", content)
+        self.assertIn("latestReply,", content)
+        self.assertIn("context: visibleThread", content)
+        self.assertIn("currentCommentRoot", content)
+        self.assertIn("const directMention = actorMatches.find", content)
+        self.assertIn('url: "about:blank"', worker)
+        self.assertLess(
+            worker.index('status: "processing", tabId: tab.id'),
+            worker.index("chrome.tabs.update(tab.id, {url: next.url"),
+        )
 
     def test_linkedin_inbox_scans_rows_and_requires_exact_outgoing_message(self):
         inbox = Path("chrome_extension/inbox_content.js").read_text(encoding="utf-8")
@@ -385,7 +519,7 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("ccLinkedInFollowups", worker)
         self.assertIn("ensureLinkedInFollowupTabs", worker)
         self.assertNotIn("active: true", worker)
-        for token in ("showOverlay", "compactOverlay"):
+        for token in ("showOverlay", "compactOverlay", "minimizedOverlay"):
             self.assertIn(token, settings)
         for token in ("show-overlay", "compact-overlay", "open-dashboard"):
             self.assertIn(token, options)
@@ -412,10 +546,12 @@ class MaintenanceTests(unittest.TestCase):
         for token in ("claimTransaction", "ccWhatsAppSendTransactions", "sendStarted",
                       "state: 'uncertain'", "sendButton", "[data-icon='send']",
                       "Retry this message once", "clearFailedTransaction",
-                      "normalizeEditorText", "await setEditorText", "sendButton() && candidates.some",
+                      "normalizeEditorText", "await setEditorText", "exactObservations",
                       "withTransactionLock", "beginSendTransaction", "duplicate send prevented",
                       "sendAttemptedAt", "ownerId: instanceId"):
             self.assertIn(token, whatsapp)
+        self.assertIn("normalizeEditorText(messageBody(row)) === wanted", whatsapp)
+        self.assertNotIn("if (sendButton() && candidates.some", whatsapp)
         self.assertIn("duplicate retry blocked", whatsapp)
 
     def test_crm_provider_settings_and_confirmed_whatsapp_delivery_are_wired(self):
@@ -431,14 +567,20 @@ class MaintenanceTests(unittest.TestCase):
             self.assertIn(field, html + options)
         for token in ("CCCRM1", "decodeSetupCode", "navigator.clipboard.readText",
                       "replace(/-/g, '+')", "complete setup code", "bridgeVersion !== expectedVersion",
-                      "CodeCrafter Client is not running", "must be restarted"):
+                      "browser runtime is unavailable", "browser runtime ${bridgeVersion} is stale"):
             self.assertIn(token, options)
-        self.assertIn("status: response.status", Path("chrome_extension/service_worker.js").read_text(encoding="utf-8"))
+        self.assertIn("status: response.status", Path("chrome_extension/native_backend.js").read_text(encoding="utf-8"))
         self.assertIn("if (confirmed && settings.integrations?.crm?.enabled)", whatsapp)
+        self.assertIn("phone: identity.phone", whatsapp)
+        self.assertIn("inboundContext: latestInboundMessage(context)", whatsapp)
+        self.assertIn("conversationHistory: context", whatsapp)
+        self.assertIn("revealConversationPhone", whatsapp)
+        self.assertIn("About and phone number", whatsapp)
+        self.assertIn("identity.phone = await revealConversationPhone", whatsapp)
         self.assertIn("/crm-event", whatsapp + server)
         self.assertIn("deliver_crm_event", server)
 
-    def test_explicit_unanswered_inquiry_gets_fact_free_fallback(self):
+    def test_explicit_unanswered_inquiry_always_gets_a_fallback(self):
         context = "\n".join((
             "INBOUND: Hey I want to hear more about websites that you've created 21:18",
             "INBOUND: hello, i didnt get an answer? 01:04",
@@ -450,7 +592,108 @@ class MaintenanceTests(unittest.TestCase):
             result = linkedin_bot.draft_inbox_reply("whatsapp", context)
         self.assertTrue(result["allowed"])
         self.assertIn("website", result["message"].lower())
-        self.assertEqual(result["review"]["reason"], "fact-free acknowledgement")
+        self.assertNotIn("I understand your latest message", result["message"])
+
+    def test_rejected_shopify_draft_still_gets_a_specific_reply(self):
+        context = "\n".join((
+            "INBOUND: I want a website.",
+            "OUTBOUND: What kind of website examples would be useful?",
+            "INBOUND: I want a Shopify store for suits, fancy pants and shoes.",
+        ))
+        with patch.object(linkedin_bot, "ollama", return_value=json.dumps({
+            "allowed": False, "reason": "invalid draft", "message": "",
+        })):
+            result = linkedin_bot.draft_inbox_reply("whatsapp", context)
+        self.assertTrue(result["allowed"])
+        self.assertIn("website", result["message"].lower())
+        self.assertIn("features", result["message"].lower())
+
+    def test_single_greeting_always_gets_a_reply(self):
+        with patch.object(linkedin_bot, "ollama", return_value=json.dumps({
+            "allowed": False, "reason": "no reply needed", "message": "",
+        })):
+            result = linkedin_bot.draft_inbox_reply("whatsapp", "INBOUND: Hello")
+        self.assertTrue(result["allowed"])
+        self.assertEqual(result["message"], "Hey! How can I help?")
+
+    def test_public_company_knowledge_answers_price_and_repeated_questions(self):
+        context = "\n".join((
+            "INBOUND: how much does a website cost? a basic landing page",
+            "OUTBOUND: A basic landing page starts at 1,000 ILS.",
+            "INBOUND: how much does a website cost? a basic landing page",
+        ))
+        knowledge = (
+            "CodeSite builds landing pages and business websites. "
+            "Websites start at 1,000 ILS and are customized per client."
+        )
+        with patch.object(linkedin_bot, "public_company_knowledge", return_value=knowledge), \
+                patch.object(linkedin_bot, "ollama", return_value=json.dumps({
+                    "allowed": False, "reason": "declined", "message": "",
+                })):
+            result = linkedin_bot.draft_inbox_reply("whatsapp", context)
+        self.assertTrue(result["allowed"])
+        self.assertIn("1,000 ILS", result["message"])
+        self.assertIn("landing page", result["message"].lower())
+        self.assertNotIn("ready to help", result["message"].lower())
+
+    def test_website_url_question_returns_both_company_sites(self):
+        with patch.object(linkedin_bot, "public_company_knowledge", return_value=""), \
+                patch.object(linkedin_bot, "ollama", return_value=json.dumps({
+                    "allowed": False, "reason": "declined", "message": "",
+                })):
+            result = linkedin_bot.draft_inbox_reply(
+                "whatsapp", "INBOUND: what is your website?",
+            )
+        self.assertTrue(result["allowed"])
+        self.assertIn("https://code-site.tech", result["message"])
+        self.assertIn("https://mosheschwartzberg.com", result["message"])
+
+    def test_whatsapp_rejected_transaction_is_reclaimed_automatically(self):
+        whatsapp = Path("chrome_extension/whatsapp_content.js").read_text(encoding="utf-8")
+        self.assertIn("if (existing?.state === 'rejected')", whatsapp)
+        self.assertIn("delete transactions[transactionId]", whatsapp)
+        self.assertNotIn("'uncertain', 'rejected'].includes(existing.state)", whatsapp)
+        self.assertIn("retrying automatically", whatsapp)
+        self.assertIn("latestInboundMessageIdentity", whatsapp)
+        self.assertIn("exactOutgoingMessageCount", whatsapp)
+
+    def test_direct_price_question_gets_required_specific_reply_after_model_declines(self):
+        context = "\n".join((
+            "INBOUND: What are your working hours?",
+            "INBOUND: hey, how much do you take for a landing page?",
+        ))
+        safeguards = {
+            "businessFacts": "Opening hours: Sunday-Thursday, 09:00-17:00.",
+        }
+        with patch.object(linkedin_bot, "ollama", side_effect=[
+            json.dumps({"allowed": False, "reason": "no reply needed", "message": ""}),
+            json.dumps({"allowed": True, "reason": "answered required inquiry",
+                        "message": "Landing-page pricing depends on the scope. How many sections "
+                                   "do you need, and should it include a form or booking flow?"}),
+            json.dumps({"pass": True, "reason": "specific safe pricing clarification",
+                        "confidence": 98}),
+        ]):
+            result = linkedin_bot.draft_inbox_reply(
+                "whatsapp", context, safeguards=safeguards,
+            )
+        self.assertTrue(result["allowed"])
+        self.assertIn("09:00-17:00", result["message"])
+        self.assertIn("pricing depends on the scope", result["message"])
+        self.assertNotIn("I understand your latest message", result["message"])
+        completed = linkedin_bot.complete_required_business_reply(
+            context, "Hello! Pricing depends on scope.", safeguards,
+        )
+        self.assertNotIn("Hello", completed)
+        self.assertIn("Sunday-Thursday, 09:00-17:00", completed)
+
+    def test_repeated_outbound_and_doubled_reply_are_rejected_deterministically(self):
+        context = "\n".join((
+            "INBOUND: I want a Shopify store.",
+            "OUTBOUND: Which examples would you like?",
+        ))
+        self.assertTrue(linkedin_bot.repeats_outbound_reply(context, "Which examples would you like?"))
+        self.assertTrue(linkedin_bot.repeats_outbound_reply(context, "HelloHello"))
+        self.assertFalse(linkedin_bot.repeats_outbound_reply(context, "Do you have product photos?"))
 
     def test_inbox_reply_uses_newest_message_without_repeating_intro(self):
         context = "\n".join((
@@ -492,12 +735,10 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(len(model.call_args_list), 4)
         self.assertIn("previous WhatsApp reply was rejected", model.call_args_list[2].args[0])
 
-    def test_hebrew_followup_uses_hebrew_and_call_context(self):
-        context = "INBOUND: אם זה משהו שמדבר אליך, אפשר לקפוץ לשיחה קצרה"
-        self.assertEqual(
-            linkedin_bot.safe_followup_reply(context),
-            "נשמע מעניין. בוא נקבע שיחה קצרה — מתי נוח לך?",
-        )
+    def test_obsolete_generic_followup_helper_is_absent(self):
+        source = Path("linkedin_bot.py").read_text(encoding="utf-8")
+        self.assertNotIn("def safe_followup_reply", source)
+        self.assertNotIn("I understand your latest message:", source)
 
     def test_linkedin_acceptance_re_resolves_replaced_button(self):
         content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
@@ -520,6 +761,27 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("Imported writing samples", prompt)
         self.assertIn("Never copy claims", prompt)
 
+    def test_explicit_writing_instructions_are_authoritative_for_style(self):
+        guidance = linkedin_bot.writing_style_guidance({
+            "sourceType": "summary",
+            "content": "Write in Hebrew. Be direct. Never use an opening greeting.",
+        })
+        self.assertIn("WRITING INSTRUCTIONS", guidance)
+        self.assertIn("Follow them", guidance)
+        self.assertIn("Write in Hebrew", guidance)
+        self.assertNotIn("only as style evidence", guidance)
+
+    def test_style_and_company_context_reach_comments_and_thread_replies(self):
+        content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
+        facebook = Path("chrome_extension/facebook_content.js").read_text(encoding="utf-8")
+        server = Path("extension_server.py").read_text(encoding="utf-8")
+        for source in (content, facebook):
+            self.assertIn("writingStyle: settings.writingStyle", source)
+            self.assertIn("safeguards: settings.replySafeguards", source)
+        self.assertIn("freshCommentRoots", content)
+        self.assertIn("Comment thread changed after drafting", content)
+        self.assertIn('data.get("writingStyle")', server)
+
     def test_reply_safeguards_block_contacts_and_enforce_scope_before_ai(self):
         safeguards = {
             "businessFacts": "Opening hours: Sunday-Thursday, 09:00-17:00.",
@@ -530,11 +792,11 @@ class MaintenanceTests(unittest.TestCase):
         }
         with patch.object(linkedin_bot, "ollama") as model:
             blocked = linkedin_bot.draft_inbox_reply(
-                "whatsapp", "INBOUND: What time are you open?", None,
+                "instagram", "INBOUND: What time are you open?", None,
                 safeguards, "Do Not Reply", True,
             )
             direct = linkedin_bot.draft_inbox_reply(
-                "whatsapp", "INBOUND: What time are you open?", None,
+                "instagram", "INBOUND: What time are you open?", None,
                 safeguards, "Client", False,
             )
         self.assertFalse(blocked["allowed"])
@@ -560,7 +822,11 @@ class MaintenanceTests(unittest.TestCase):
             )
         self.assertTrue(result["allowed"])
         self.assertIn("VERIFIED_COMPANY_INFORMATION", model.call_args_list[0].args[0])
-        self.assertIn("Sunday-Thursday", model.call_args_list[1].args[0])
+        self.assertEqual(len(model.call_args_list), 1)
+        self.assertEqual(
+            result["review"]["reason"],
+            "required business inquiry passed deterministic review",
+        )
 
     def test_options_and_content_scripts_wire_reply_safeguards(self):
         html = Path("chrome_extension/options.html").read_text(encoding="utf-8")
@@ -575,8 +841,9 @@ class MaintenanceTests(unittest.TestCase):
         for token in ("replySafeguards", "replyDecision", "blockedContacts",
                       "allowedContacts", "conversationScope"):
             self.assertIn(token, settings + options)
+        self.assertIn("replyDecision", inbox)
+        self.assertNotIn("replyDecision", whatsapp)
         for source in (inbox, whatsapp):
-            self.assertIn("replyDecision", source)
             self.assertIn("safeguards", source)
             self.assertIn("isGroup", source)
             self.assertIn("contact", source)

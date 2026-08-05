@@ -1,4 +1,5 @@
 importScripts("settings.js");
+importScripts("native_backend.js");
 
 const INBOX_URLS = {
   linkedin: "https://www.linkedin.com/messaging/?cc_auto_messages=1",
@@ -9,6 +10,103 @@ const WHATSAPP_URL = "https://web.whatsapp.com/?cc_auto_messages=1";
 const LINKEDIN_INVITATIONS_URL =
   "https://www.linkedin.com/mynetwork/invitation-manager/received/?cc_auto_invites=1";
 const LINKEDIN_TASK_CONCURRENCY = 3;
+const LINKEDIN_SCHEDULE_URL = "https://www.linkedin.com/feed/?cc_scheduled_post=1";
+
+const canonicalFacebookGroupUrl = (raw) => {
+  try {
+    const url = new URL(raw);
+    const match = url.pathname.match(/^\/groups\/([^/]+)/i);
+    return match ? `https://www.facebook.com/groups/${match[1]}/?cc_group_monitor=1` : "";
+  } catch (_error) { return ""; }
+};
+
+const ensureFacebookGroupTabs = async () => {
+  const settings = await CodeCrafterSettings.load();
+  const config = settings.platforms.facebook;
+  const stored = await chrome.storage.local.get("ccFacebookGroupTabs");
+  const tracked = stored.ccFacebookGroupTabs || {};
+  const wanted = config?.enabled && config.groupMonitoring
+    ? config.groupUrls.map(canonicalFacebookGroupUrl).filter(Boolean) : [];
+  for (const [url, tabId] of Object.entries(tracked)) {
+    if (!wanted.includes(url)) {
+      await chrome.tabs.remove(tabId).catch(() => {});
+      delete tracked[url];
+    }
+  }
+  for (const url of wanted) {
+    if (tracked[url]) {
+      try { await chrome.tabs.get(tracked[url]); continue; }
+      catch (_error) { delete tracked[url]; }
+    }
+    tracked[url] = (await chrome.tabs.create({url, active: false})).id;
+  }
+  await chrome.storage.local.set({ccFacebookGroupTabs: tracked});
+  return {ok: true, opened: wanted.length, urls: wanted};
+};
+
+const ensureLinkedInScheduledPost = async () => {
+  const settings = await CodeCrafterSettings.load();
+  const config = settings.platforms.linkedin;
+  if (!config?.enabled || !config.scheduledPosts) return {ok: true, due: false};
+  const now = new Date();
+  if (now.getHours() < config.postHour) return {ok: true, due: false};
+  const stored = await chrome.storage.local.get(["ccLastLinkedInScheduledPostAt", "ccLinkedInScheduledPostTabId"]);
+  const interval = Math.max(1, config.postEveryDays) * 86400000;
+  if (!stored.ccLastLinkedInScheduledPostAt) {
+    await chrome.storage.local.set({ccLastLinkedInScheduledPostAt: Date.now()});
+    return {ok: true, due: false, initialized: true};
+  }
+  if (Date.now() - Number(stored.ccLastLinkedInScheduledPostAt || 0) < interval)
+    return {ok: true, due: false};
+  if (stored.ccLinkedInScheduledPostTabId) {
+    try { await chrome.tabs.get(stored.ccLinkedInScheduledPostTabId); return {ok: true, due: true, existing: true}; }
+    catch (_error) { await chrome.storage.local.remove("ccLinkedInScheduledPostTabId"); }
+  }
+  const tab = await chrome.tabs.create({url: LINKEDIN_SCHEDULE_URL, active: false});
+  await chrome.storage.local.set({ccLinkedInScheduledPostTabId: tab.id});
+  return {ok: true, due: true, tabId: tab.id};
+};
+
+const activateRequestedLinkedInScheduleOnce = async () => {
+  const migrationKey = "cc3203LinkedInScheduleActivated";
+  if ((await chrome.storage.local.get(migrationKey))[migrationKey]) return;
+  const settings = await CodeCrafterSettings.load();
+  settings.platforms.linkedin.enabled = true;
+  settings.platforms.linkedin.scheduledPosts = true;
+  settings.platforms.linkedin.postEveryDays = 3;
+  await CodeCrafterSettings.save(settings);
+  await chrome.storage.local.set({[migrationKey]: true});
+};
+
+const activateRequestedLinkedInCommentsOnce = async () => {
+  const migrationKey = "cc3207LinkedInCommentsActivated";
+  if ((await chrome.storage.local.get(migrationKey))[migrationKey]) return;
+  const settings = await CodeCrafterSettings.load();
+  settings.platforms.linkedin.enabled = true;
+  settings.platforms.linkedin.comments = true;
+  await CodeCrafterSettings.save(settings);
+  await chrome.storage.local.set({[migrationKey]: true});
+};
+
+const activateRequestedPopupOnce = async () => {
+  const migrationKey = "cc3208PopupVisibilityActivated";
+  if ((await chrome.storage.local.get(migrationKey))[migrationKey]) return;
+  const settings = await CodeCrafterSettings.load();
+  settings.ui.showOverlay = true;
+  settings.ui.minimizedOverlay = true;
+  await CodeCrafterSettings.save(settings);
+  await chrome.storage.local.set({[migrationKey]: true});
+};
+
+const configureBrowserAutomation = async () => {
+  await activateRequestedLinkedInScheduleOnce();
+  await activateRequestedLinkedInCommentsOnce();
+  await activateRequestedPopupOnce();
+  chrome.alarms.create("ccFacebookGroups", {periodInMinutes: 1});
+  chrome.alarms.create("ccLinkedInScheduledPosts", {periodInMinutes: 5});
+  await ensureFacebookGroupTabs();
+  await ensureLinkedInScheduledPost();
+};
 
 const ensureWhatsAppTab = async (activate = false) => {
   const settings = await CodeCrafterSettings.load();
@@ -88,6 +186,7 @@ chrome.runtime.onInstalled.addListener(() => {
   ensureWhatsAppTab(false).catch(() => {});
   clearStaleNotificationAutomation().catch(() => {});
   ensureLinkedInFollowupTabs().catch(() => {});
+  configureBrowserAutomation().catch(() => {});
 });
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create("ccDailyMessages", {periodInMinutes: 5});
@@ -97,12 +196,16 @@ chrome.runtime.onStartup.addListener(() => {
   ensureWhatsAppTab(false).catch(() => {});
   clearStaleNotificationAutomation().catch(() => {});
   ensureLinkedInFollowupTabs().catch(() => {});
+  configureBrowserAutomation().catch(() => {});
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "ccDailyMessages") openEnabledMessageTabs(false).catch(() => {});
   if (alarm.name === "ccWhatsAppMonitor") ensureWhatsAppTab(false).catch(() => {});
   if (alarm.name === "ccLinkedInFollowups") ensureLinkedInFollowupTabs().catch(() => {});
+  if (alarm.name === "ccFacebookGroups") ensureFacebookGroupTabs().catch(() => {});
+  if (alarm.name === "ccLinkedInScheduledPosts") ensureLinkedInScheduledPost().catch(() => {});
 });
+configureBrowserAutomation().catch(() => {});
 
 const profileKey = (rawUrl) => {
   const url = new URL(rawUrl);
@@ -177,13 +280,29 @@ const openNextNotificationReply = async () => {
   }
   await chrome.storage.local.set({ccLinkedInPriorityActive: true});
   for (const next of pending) {
-    const tab = await chrome.tabs.create({url: next.url, active: false});
+    const tab = await chrome.tabs.create({url: "about:blank", active: false});
     const {key, ...value} = next;
     await chrome.storage.local.set({[key]: {...value, status: "processing", tabId: tab.id}});
+    await chrome.tabs.update(tab.id, {url: next.url, active: false});
   }
 };
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "refreshBrowserAutomation") {
+    Promise.all([ensureFacebookGroupTabs(), ensureLinkedInScheduledPost()])
+      .then(([facebook, linkedin]) => sendResponse({ok: true, facebook, linkedin}))
+      .catch(error => sendResponse({ok: false, error: String(error)}));
+    return true;
+  }
+  if (message?.type === "finishScheduledLinkedInPost") {
+    (async () => {
+      if (message.ok) await chrome.storage.local.set({ccLastLinkedInScheduledPostAt: Date.now()});
+      await chrome.storage.local.remove("ccLinkedInScheduledPostTabId");
+      if (_sender.tab?.id) await chrome.tabs.remove(_sender.tab.id).catch(() => {});
+      sendResponse({ok: true});
+    })();
+    return true;
+  }
   if (message?.type === "runMessageRepliesNow") {
     Promise.all([openEnabledMessageTabs(true), ensureWhatsAppTab(false)])
       .then(([social, whatsapp]) => sendResponse({
@@ -367,13 +486,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message?.type !== "localApi") return;
-  fetch(`http://127.0.0.1:8765${message.path}`, {
-    method: message.method || "GET",
-    headers: {"Content-Type": "application/json"},
-    body: message.body ? JSON.stringify(message.body) : undefined
-  }).then(async response => sendResponse({
-    ok: response.ok, status: response.status, data: await response.json(),
-  }))
-    .catch(error => sendResponse({ok: false, error: String(error)}));
+  CodeCrafterNativeBackend.handle(message.path, message.method || "GET", message.body || {})
+    .then(data => sendResponse({ok: data?.ok !== false, status: data?.ok === false ? 400 : 200, data}))
+    .catch(error => sendResponse({ok: false, status: 500, error: String(error), data: {error: String(error)}}));
   return true;
 });

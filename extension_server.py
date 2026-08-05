@@ -43,6 +43,7 @@ def deliver_crm_event(config: dict, event: dict) -> dict:
         "conversation": {
             "channel": str(event.get("channel", "social"))[:40],
             "inboundContext": str(event.get("inboundContext", ""))[-10000:],
+            "history": str(event.get("conversationHistory", ""))[-10000:],
             "outboundMessage": str(event.get("outboundMessage", ""))[:10000],
             "status": str(event.get("status", "sent"))[:40],
             "actionId": str(event.get("actionId", ""))[:700],
@@ -269,7 +270,10 @@ def run_server(bot) -> None:
                 return self.reply({"candidates": candidates[:remaining]})
             if self.path == "/draft-notification-reply":
                 result = bot.draft_notification_reply(
-                    data.get("context", ""), data.get("notificationText", "")
+                    data.get("context", ""), data.get("notificationText", ""),
+                    data.get("latestReply", ""),
+                    data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
+                    data.get("safeguards") if isinstance(data.get("safeguards"), dict) else None,
                 )
                 bot.record_metric("notification_reply_drafted", allowed=result.get("allowed"),
                                   notification_id=data.get("notificationId", ""))
@@ -289,7 +293,11 @@ def run_server(bot) -> None:
                 bot.record_metric("connection_drafted", allowed=result.get("allowed"), profile_url=data.get("url"))
                 return self.reply(result)
             if self.path == "/draft-social-comment":
-                result = bot.draft_social_comment(data.get("site", "social"), data.get("context", ""))
+                result = bot.draft_social_comment(
+                    data.get("site", "social"), data.get("context", ""),
+                    data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
+                    data.get("safeguards") if isinstance(data.get("safeguards"), dict) else None,
+                )
                 bot.record_metric("social_comment_drafted", site=data.get("site", "unknown"),
                                   allowed=result.get("allowed"))
                 return self.reply(result)
@@ -365,7 +373,11 @@ def run_server(bot) -> None:
                 if (features.get("comments", True) and
                         state["comments"] < bot.SETTINGS.max_comments_per_day and
                         not item.get("alreadyCommented")):
-                    draft = bot.generate_comment(item["text"])
+                    draft = bot.generate_comment(
+                        item["text"],
+                        data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
+                        data.get("safeguards") if isinstance(data.get("safeguards"), dict) else None,
+                    )
                     review = bot.evaluate_comment(item["text"], draft)
                     if review.get("pass") and int(review.get("confidence", 0)) >= 75:
                         action["comment"] = draft

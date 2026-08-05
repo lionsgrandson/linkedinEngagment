@@ -1,12 +1,14 @@
 ;(() => {
   if (window.__codeCrafterFacebookBridge || location.pathname.startsWith('/messages')) return
   window.__codeCrafterFacebookBridge = true
-  const EXTENSION_VERSION = '3.18.5'
-  const EXTENSION_BUILD = '08861639905a'
+  const EXTENSION_VERSION = '3.20.8'
+  const EXTENSION_BUILD = '6df01dcb2ab1'
   const processed = new Set()
   let profileState = null
   let busy = false
   let paused = false
+  let groupBaselineReady = false
+  let groupLastReload = Date.now()
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   const api = (path, method = 'GET', body = null) =>
     chrome.runtime.sendMessage({ type: 'localApi', path, method, body })
@@ -59,14 +61,33 @@
     }).filter(Boolean)
     return nodes.filter((node, index) => nodes.indexOf(node) === index)
   }
-  function currentPost(excluded = null) {
+  function facebookItems() {
     return facebookPostNodes().filter(visible).map((node) => {
-      const rect = node.getBoundingClientRect(); const text = (node.innerText || '').trim().slice(0, 5000)
+      const rect = node.getBoundingClientRect()
+      const message = node.querySelector(
+        "[data-ad-rendering-role='story_message'],[data-ad-comet-preview='message'],[data-ad-preview='message']",
+      )
+      const text = (message?.innerText || message?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 5000)
       const mediaUrls = [...node.querySelectorAll('img,video')]
         .filter((element) => element.tagName === 'VIDEO' || element.naturalWidth >= 180)
         .map((element) => element.currentSrc || element.src || element.poster || '').filter(Boolean).slice(0, 3)
-      return {node, text, mediaUrls, key: node.getAttribute('aria-posinset') || text.slice(0, 300), distance: Math.abs(rect.top + rect.height / 2 - innerHeight / 2)}
-    }).filter((item) => item.text.length > 30 && !excluded?.has(item.key)).sort((a, b) => a.distance - b.distance)[0]
+      const postLinks = [...node.querySelectorAll("a[href*='/posts/']:not([href*='comment_id']),a[href*='permalink']:not([href*='comment_id'])")]
+      const permalink = postLinks
+        .map((link) => link.href).find(Boolean)
+      const timeLabels = [...postLinks, ...node.querySelectorAll('abbr,time')]
+        .flatMap((element) => labels(element)).join(' ')
+      let ageSeconds = Number.POSITIVE_INFINITY
+      if (/\b(?:just now|now|new)\b/i.test(timeLabels)) ageSeconds = 0
+      const relative = timeLabels.match(/\b(\d+)\s*(s|sec(?:ond)?s?|m|min(?:ute)?s?)\b/i)
+      if (relative) ageSeconds = Number(relative[1]) * (/^s/i.test(relative[2]) ? 1 : 60)
+      const timestamp = [...node.querySelectorAll('time[datetime]')]
+        .map((element) => Date.parse(element.getAttribute('datetime'))).find(Number.isFinite)
+      if (Number.isFinite(timestamp)) ageSeconds = Math.max(0, (Date.now() - timestamp) / 1000)
+      return {node, text, mediaUrls, ageSeconds, key: permalink || node.getAttribute('aria-posinset') || text.slice(0, 300), distance: Math.abs(rect.top + rect.height / 2 - innerHeight / 2)}
+    }).filter((item) => item.text.length > 10)
+  }
+  function currentPost(excluded = null) {
+    return facebookItems().filter((item) => !excluded?.has(item.key)).sort((a, b) => a.distance - b.distance)[0]
   }
   async function matchesConfiguredTopics(item, config) {
     if (CodeCrafterSettings.matchesTopics(item.text, config.topics)) return true
@@ -184,8 +205,15 @@
     editor.focus(); document.execCommand('insertText', false, text)
     editor.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: text}))
   }
-  async function comment(item, config) {
-    const draft = await api('/draft-social-comment', 'POST', {site: 'facebook', context: item.text, topics: config.topics})
+  async function comment(item, config, settings, endpoint = '/draft-social-comment') {
+    const draft = await api(endpoint, 'POST', {
+      site: 'facebook',
+      context: item.text,
+      topics: config.topics,
+      writingStyle: settings.writingStyle,
+      safeguards: settings.replySafeguards,
+      intent: config.groupIntent,
+    })
     if (!draft?.ok || !draft.data.allowed || !draft.data.comment) return {ok: false, reason: draft?.data?.reason || 'comment draft failed'}
     findControl(item.node, /^(Comment|Write a comment|Leave a comment)$/i)?.click(); await waitActive(600)
     const editor = [...item.node.querySelectorAll("[contenteditable='true'][role='textbox']")].find(visible)
@@ -197,12 +225,77 @@
     for (let i = 0; i < 24; i += 1) { await sleep(250); if (!editor.textContent.trim()) return {ok: true, reason: 'Facebook confirmed comment'} }
     return {ok: false, reason: 'Facebook did not confirm comment'}
   }
+  const currentGroupUrl = () => {
+    const match = location.pathname.match(/^\/groups\/([^/]+)/i)
+    return match ? `https://www.facebook.com/groups/${match[1]}/` : ''
+  }
+  async function runFacebookGroupMonitor(settings, config) {
+    const groupUrl = currentGroupUrl()
+    if (!groupUrl || !new URLSearchParams(location.search).has('cc_group_monitor')) return false
+    const groupId = location.pathname.match(/^\/groups\/([^/]+)/i)?.[1]
+    const configured = config.groupUrls.some((raw) => {
+      try { return new URL(raw).pathname.match(/^\/groups\/([^/]+)/i)?.[1] === groupId }
+      catch (_error) { return false }
+    })
+    if (!config.groupMonitoring || !configured) {
+      status('Blank state - this Facebook group is not enabled for monitoring', 'blank')
+      return true
+    }
+    const items = facebookItems()
+    const stored = await chrome.storage.local.get(['ccFacebookGroupSeen', 'ccFacebookGroupDetected'])
+    const seen = stored.ccFacebookGroupSeen || {}
+    const detected = stored.ccFacebookGroupDetected || {}
+    if (!groupBaselineReady && !seen[groupUrl]) {
+      seen[groupUrl] = Object.fromEntries(items.map((item) => [item.key, Date.now()]))
+      await chrome.storage.local.set({ccFacebookGroupSeen: seen})
+      groupBaselineReady = true
+      status(`Blank state - monitoring baseline saved for ${items.length} existing group posts`, 'blank')
+      return true
+    }
+    groupBaselineReady = true
+    const groupSeen = seen[groupUrl] || {}
+    const staleUnseen = items.filter((candidate) => !groupSeen[candidate.key] && candidate.ageSeconds > 120)
+    for (const candidate of staleUnseen) groupSeen[candidate.key] = Date.now()
+    if (staleUnseen.length) {
+      seen[groupUrl] = groupSeen
+      await chrome.storage.local.set({ccFacebookGroupSeen: seen})
+    }
+    const item = items.find((candidate) => !groupSeen[candidate.key] && candidate.ageSeconds <= 120)
+    if (!item) {
+      status('Blank state - waiting for a new Facebook group post', 'blank')
+      if (Date.now() - groupLastReload > 60000) { groupLastReload = Date.now(); location.reload() }
+      return true
+    }
+    const detectionKey = `${groupUrl}|${item.key}`
+    if (!detected[detectionKey]) {
+      detected[detectionKey] = Date.now()
+      await chrome.storage.local.set({ccFacebookGroupDetected: detected})
+    }
+    const delayMs = Math.max(5, config.groupCommentDelaySeconds || 10) * 1000
+    const remaining = delayMs - (Date.now() - detected[detectionKey])
+    if (remaining > 0) {
+      status(`Loading - new group post detected; reading it in ${(remaining / 1000).toFixed(1)}s`, 'loading')
+      return true
+    }
+    status('Loading - checking the new group post against your requested intent', 'loading')
+    const result = await comment(item, config, settings, '/draft-facebook-group-comment')
+    groupSeen[item.key] = Date.now()
+    seen[groupUrl] = groupSeen
+    delete detected[detectionKey]
+    await chrome.storage.local.set({ccFacebookGroupSeen: seen, ccFacebookGroupDetected: detected})
+    await api('/result', 'POST', {ok: result.ok, kind: result.ok ? 'facebook_group_comment' : undefined,
+      actionId: `facebook:group-comment:${item.key}`, reason: result.reason})
+    status(result.ok ? 'Success - new Facebook group post comment confirmed'
+      : `Blank state - new group post skipped: ${result.reason}`, result.ok ? 'success' : 'blank')
+    return true
+  }
   async function cycle() {
     if (busy || paused) return
     busy = true
     try {
       const settings = await CodeCrafterSettings.load(); const config = settings.platforms.facebook
       if (!config.enabled) return status('Blank state — Facebook automation disabled', 'blank')
+      if (await runFacebookGroupMonitor(settings, config)) return
       if (await runFacebookProfileBatch(config)) return
       const item = currentPost()
       if (!item) { status('Blank state — no visible Facebook post', 'blank'); window.scrollBy({top: 700, behavior: 'smooth'}); return }
@@ -225,11 +318,11 @@
             reason: followed ? 'Facebook confirmed follow' : 'Facebook follow not confirmed'})
         }
       }
-      if (config.comments) { const result = await comment(item, config); await api('/result', 'POST', {ok: result.ok, kind: result.ok ? 'facebook_comment' : undefined, actionId: `facebook:comment:${item.key}`, reason: result.reason}) }
+      if (config.comments) { const result = await comment(item, config, settings); await api('/result', 'POST', {ok: result.ok, kind: result.ok ? 'facebook_comment' : undefined, actionId: `facebook:comment:${item.key}`, reason: result.reason}) }
       status('Success — Facebook post processed', 'success'); window.scrollBy({top: 650, behavior: 'smooth'}); await waitActive(900)
     } catch (error) { status(`Failure — ${String(error).slice(0, 140)}`, 'failure') }
     finally { busy = false }
   }
   panel(); api('/extension-heartbeat', 'POST', {site: 'facebook', extensionVersion: EXTENSION_VERSION, extensionBuild: EXTENSION_BUILD, url: location.href})
-  setInterval(cycle, 9000); cycle()
+  setInterval(cycle, 5000); cycle()
 })()

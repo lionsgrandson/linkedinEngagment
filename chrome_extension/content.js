@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.18.5'
-  const EXTENSION_BUILD = '08861639905a'
+  const EXTENSION_VERSION = '3.20.8'
+  const EXTENSION_BUILD = '6df01dcb2ab1'
   let paused = false
   let busy = false
   const processed = new Set()
@@ -125,9 +125,52 @@
     return false
   }
 
-  const commentRoots = (root = document) => [...root.querySelectorAll(
-    ".comments-comment-item,[data-view-name='comment-item'],[data-urn*='comment']",
-  )].filter(visible)
+  const currentCommentRoot = (replyButton) => {
+    let node = replyButton?.parentElement
+    for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
+      if (node.querySelector("a[href*='/in/']") && normalizeText(node.innerText).length > 20)
+        return node
+    }
+    return null
+  }
+  const commentRoots = (root = document) => {
+    const legacy = [...root.querySelectorAll(
+      ".comments-comment-item,[data-view-name='comment-item'],[data-urn*='comment']",
+    )]
+    const current = controls(root)
+      .filter((control) => /^Reply$/i.test(label(control)))
+      .map(currentCommentRoot)
+      .filter(Boolean)
+    return [...new Set([...legacy, ...current])].filter(visible)
+  }
+  const commentAuthor = (root) => {
+    const legacy = [
+      "[data-view-name='comment-actor-name']", '.comments-post-meta__name-text',
+      '.comments-comment-meta__description-title', "a[href*='/in/'] span[aria-hidden='true']",
+    ].map((selector) => root.querySelector(selector)).find(Boolean)
+    if (legacy) return normalizeText(legacy.innerText)
+    const authorLink = root.querySelector("a[href*='/in/']")
+    return normalizeText(
+      authorLink?.querySelector('p')?.innerText || authorLink?.innerText || '',
+    ).replace(/\s+You$/i, '')
+  }
+  const commentBody = (root) => {
+    const legacy = [
+      "[data-view-name='comment-commentary']", '.comments-comment-item__main-content',
+      '.update-components-text', '.feed-shared-inline-show-more-text',
+    ].map((selector) => root.querySelector(selector)).find(Boolean)
+    if (legacy) return normalizeText(legacy.innerText)
+    const authorLink = root.querySelector("a[href*='/in/']")
+    const candidates = [...root.querySelectorAll('p')]
+      .filter((paragraph) => !authorLink?.contains(paragraph))
+      .map((paragraph) => normalizeText(paragraph.innerText))
+      .filter((value) =>
+        value &&
+        !/^(?:Author|You|Follow|\d+|(?:\d+\s*)?[smhdw])$/i.test(value) &&
+        !/^(?:\d+\s+)?(?:reactions?|impressions?)$/i.test(value),
+      )
+    return candidates[0] || ''
+  }
   const hasExactComment = (root, expected) => {
     const wanted = normalizeText(expected)
     const signature = wanted.slice(0, 100)
@@ -135,18 +178,60 @@
       (comment) => normalizeText(comment.innerText).includes(signature),
     )
   }
-  const hasOwnComment = (root) => commentRoots(root).some((comment) => {
-    const content = `${label(comment)} ${comment.innerText || ''}`
-    return /Moshe Schwartzberg(?:’|'|â€™)?s comment|View Moshe(?: Schwartzberg)?(?:’|'|â€™)?s profile|\bMoshe Schwartzberg\b/i.test(content)
-  })
+  const hasOwnComment = (root) => commentRoots(root).some((comment) =>
+    /\bMoshe Schwartzberg\b/i.test(commentAuthor(comment)),
+  )
   async function expandComments(root) {
-    for (let pass = 0; pass < 3; pass += 1) {
+    for (let pass = 0; pass < 6; pass += 1) {
       const control = findControl(/^(Load|Show|View) (more|previous|all|\d+) (comments|replies)/i, root)
       if (!control) return
       control.scrollIntoView({block: 'center'})
       control.click()
       await sleep(1200)
     }
+  }
+  async function freshCommentRoots(root = document, timeout = 12000) {
+    const deadline = Date.now() + timeout
+    let previous = ''
+    let stableReads = 0
+    while (Date.now() < deadline) {
+      await expandComments(root)
+      const comments = commentRoots(root)
+      const snapshot = comments.map((comment) =>
+        `${commentAuthor(comment)}:${commentBody(comment)}`,
+      ).join('\n')
+      if (snapshot && snapshot === previous) {
+        stableReads += 1
+        if (stableReads >= 2) return comments
+      } else {
+        previous = snapshot
+        stableReads = 0
+      }
+      await sleep(500)
+    }
+    return commentRoots(root)
+  }
+  function replyTarget(threadComments, actor, commentUrn) {
+    const urnTarget = commentUrn ? threadComments.find((root) =>
+      [...root.attributes].some((attribute) => attribute.value.includes(commentUrn)) ||
+      root.querySelector(`[data-urn*="${CSS.escape(commentUrn)}"]`),
+    ) : null
+    const highlighted = threadComments.find((root) =>
+      root.matches(".comments-comment-item--highlighted,[data-highlighted='true']") &&
+      findControl(/^Reply$/i, root),
+    )
+    const actorMatches = actor ? [...threadComments].reverse().filter((root) =>
+      commentAuthor(root).toLowerCase().includes(actor.toLowerCase()) &&
+      findControl(/^Reply$/i, root),
+    ) : []
+    const directMention = actorMatches.find((root) =>
+      [...root.querySelectorAll("a[href*='/in/']")].slice(1).some((link) =>
+        /moshe-schwartzberg/i.test(link.href) ||
+        /\bMoshe Schwartzberg\b/i.test(normalizeText(link.innerText)),
+      ),
+    )
+    return urnTarget || directMention || (actorMatches.length === 1 ? actorMatches[0] : null) ||
+      highlighted || null
   }
   async function waitForExactComment(root, expected, timeout = 12000) {
     const deadline = Date.now() + timeout
@@ -167,12 +252,8 @@
     box.style.cssText =
       'position:fixed;right:18px;bottom:18px;z-index:2147483647;width:250px;padding:14px;border-radius:12px;background:#111827;color:#fff;font:14px Arial;box-shadow:0 8px 30px #0006'
     box.innerHTML =
-      `<style>@keyframes ccPulse{50%{opacity:.35}}#cc-status[data-state="loading"]::after{content:"";display:block;width:72%;height:7px;margin-top:7px;border-radius:5px;background:#94a3b8;animation:ccPulse 1s infinite}#cc-minimize:hover,#cc-pause:hover{filter:brightness(1.12)}</style><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b>CodeCrafter Bot v${EXTENSION_VERSION}</b><button id="cc-minimize" aria-label="Minimize bot panel" title="Minimize" style="width:28px;height:28px;border:1px solid #475569;border-radius:7px;background:#1e293b;color:#fff;font-size:18px;line-height:1;cursor:pointer;transition:filter .15s">−</button></div><div id="cc-panel-body"><div id="cc-status" data-state="loading" style="margin:9px 0">Connecting to Python...</div><button id="cc-pause" style="width:100%;padding:10px;border:0;border-radius:8px;background:#f59e0b;font-weight:700;cursor:pointer;transition:filter .15s">Pause bot</button></div>`
+      `<style>@keyframes ccPulse{50%{opacity:.35}}#cc-status[data-state="loading"]::after{content:"";display:block;width:72%;height:7px;margin-top:7px;border-radius:5px;background:#94a3b8;animation:ccPulse 1s infinite}#cc-minimize:hover,#cc-pause:hover{filter:brightness(1.12)}</style><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b>CodeCrafter Bot v${EXTENSION_VERSION}</b><button id="cc-minimize" aria-label="Minimize bot panel" title="Minimize" style="width:28px;height:28px;border:1px solid #475569;border-radius:7px;background:#1e293b;color:#fff;font-size:18px;line-height:1;cursor:pointer;transition:filter .15s">−</button></div><div id="cc-panel-body"><div id="cc-status" data-state="loading" style="margin:9px 0">Connecting to browser intelligence...</div><button id="cc-pause" style="width:100%;padding:10px;border:0;border-radius:8px;background:#f59e0b;font-weight:700;cursor:pointer;transition:filter .15s">Pause bot</button></div>`
     document.documentElement.appendChild(box)
-    CodeCrafterSettings.load().then(({ui}) => {
-      if (!ui.showOverlay) box.style.display = 'none'
-      if (ui.compactOverlay) Object.assign(box.style, {width: '205px', padding: '8px', fontSize: '12px'})
-    })
     const button = box.querySelector('#cc-pause')
     button.onmouseenter = () => (button.style.filter = 'brightness(1.12)')
     button.onmouseleave = () => (button.style.filter = 'none')
@@ -190,12 +271,26 @@
       minimize.setAttribute('aria-label', minimized ? 'Expand bot panel' : 'Minimize bot panel')
       minimize.title = minimized ? 'Expand' : 'Minimize'
       Object.assign(box.style, minimized
-        ? {width: '250px', padding: '9px 11px'}
+        ? {width: '178px', padding: '8px 10px', right: '12px', bottom: '12px'}
         : {width: '250px', padding: '14px'})
       sessionStorage.setItem('ccBotPanelMinimized', minimized ? '1' : '0')
     }
     applyMinimized(sessionStorage.getItem('ccBotPanelMinimized') === '1')
-    minimize.onclick = () => applyMinimized(body.style.display !== 'none')
+    CodeCrafterSettings.load().then(({ui}) => {
+      box.style.display = ui.showOverlay ? 'block' : 'none'
+      if (ui.compactOverlay && !ui.minimizedOverlay)
+        Object.assign(box.style, {width: '205px', padding: '8px', fontSize: '12px'})
+      applyMinimized(ui.minimizedOverlay)
+    }).catch(() => { box.style.display = 'block' })
+    minimize.onclick = () => {
+      const minimized = body.style.display !== 'none'
+      applyMinimized(minimized)
+      CodeCrafterSettings.load().then((latest) => {
+        latest.ui.showOverlay = true
+        latest.ui.minimizedOverlay = minimized
+        return CodeCrafterSettings.save(latest)
+      }).catch(() => {})
+    }
   }
   function status(text, state = 'filled') {
     panel()
@@ -398,6 +493,7 @@
       reason: confirmation.reason,
     })
     if (confirmation.ok && action.connect) await queueProfileConnection(action.authorUrl)
+    return {preserveStatus: true, ok: confirmation.ok}
   }
   async function queueProfileConnection(url) {
     if (!url || queuedProfiles.has(url)) return
@@ -702,18 +798,9 @@
         "[data-urn*='comment']",
       ], 12000)
     }
-    await expandComments(document)
-    const threadComments = commentRoots(document)
-    const highlighted = threadComments.find((root) =>
-      root.matches(".comments-comment-item--highlighted,[data-highlighted='true']") &&
-      findControl(/^Reply$/i, root),
-    )
-    const target = (actor
-      ? [...threadComments].reverse().find((root) =>
-          (root.innerText || '').toLowerCase().includes(actor.toLowerCase()) &&
-          findControl(/^Reply$/i, root),
-        )
-      : null) || highlighted || [...threadComments].reverse().find((root) => findControl(/^Reply$/i, root))
+    const threadComments = await freshCommentRoots(document)
+    const commentUrn = decodeURIComponent(String(task.url || '')).match(/commentUrn=([^&]+)/i)?.[1] || ''
+    const target = replyTarget(threadComments, actor, commentUrn)
     const replyButton = target ? findControl(/^Reply$/i, target) : null
     if (!target || !replyButton) {
       const reason = `Could not safely identify the replied-to comment; actor=${actor || 'unknown'}`
@@ -721,10 +808,25 @@
       await finishNotificationTask(task, 'retry', reason)
       return
     }
+    const latestReply = commentBody(target)
+    if (!latestReply) {
+      const reason = `Could not read the exact LinkedIn comment being answered; actor=${actor || 'unknown'}`
+      await api('/result', 'POST', {ok: false, reason})
+      await finishNotificationTask(task, 'retry', reason)
+      return
+    }
+    const visibleThread = threadComments.map((root) => {
+      const body = commentBody(root)
+      return body ? `${commentAuthor(root) || 'Unknown'}: ${body}` : ''
+    }).filter(Boolean).join('\n').slice(-10000)
+    const settings = await CodeCrafterSettings.load()
     const response = await api('/draft-notification-reply', 'POST', {
       notificationId: task.id,
       notificationText: task.notificationText,
-      context: `${task.notificationText || ''}\n${normalizeText(target.innerText)}`.slice(-10000),
+      latestReply,
+      context: visibleThread || `${task.notificationText || ''}\n${latestReply}`,
+      writingStyle: settings.writingStyle,
+      safeguards: settings.replySafeguards,
     })
     if (!response?.ok || !response.data.allowed || !response.data.reply) {
       const reason = `Notification reply skipped: ${response?.data?.reason || 'draft failed'}`
@@ -758,7 +860,17 @@
       return
     }
     if (!(await countdown('Comment reply'))) return
-    await expandComments(document)
+    const refreshedComments = await freshCommentRoots(document, 7000)
+    const refreshedTarget = replyTarget(refreshedComments, actor, commentUrn)
+    const refreshedLatestReply = refreshedTarget ? commentBody(refreshedTarget) : ''
+    if (!refreshedLatestReply || refreshedLatestReply !== latestReply) {
+      editor.textContent = ''
+      editor.dispatchEvent(new Event('input', {bubbles: true}))
+      const reason = 'Comment thread changed after drafting; rereading before a new reply'
+      await api('/result', 'POST', {ok: false, reason})
+      await finishNotificationTask(task, 'retry', reason)
+      return status(`Blank state - ${reason}`, 'blank')
+    }
     if (hasExactComment(document, response.data.reply)) {
       await finishNotificationTask(task, 'done', 'duplicate reply appeared before submit')
       return status('Blank state - duplicate notification reply prevented', 'blank')
@@ -894,6 +1006,61 @@
       `Daily follow-up started - ${pendingConnections.length} pending connections to check`,
     )
   }
+  async function runScheduledLinkedInPost() {
+    if (!new URLSearchParams(location.search).has('cc_scheduled_post')) return false
+    const settings = await CodeCrafterSettings.load()
+    if (!settings.platforms.linkedin.enabled || !settings.platforms.linkedin.scheduledPosts) {
+      status('Blank state - scheduled LinkedIn posting is disabled', 'blank')
+      await chrome.runtime.sendMessage({type: 'finishScheduledLinkedInPost', ok: false})
+      return true
+    }
+    status('Loading - reading writing style and business information for the scheduled post', 'loading')
+    const draft = await api('/draft-linkedin-post', 'POST', {})
+    if (!draft?.ok || !draft.data.allowed || !draft.data.post) {
+      status(`Failure - ${draft?.data?.reason || draft?.data?.error || draft?.error || 'post drafting failed'}`, 'failure')
+      return true
+    }
+    const openComposer = findControl(/^(Start a post|Create a post)$/i)
+    if (!openComposer) {
+      status('Failure - LinkedIn post composer button was not found', 'failure')
+      return true
+    }
+    openComposer.click()
+    const editor = await waitForVisible([
+      "div[role='dialog'] div[contenteditable='true'][role='textbox']",
+      "div[role='dialog'] .ql-editor[contenteditable='true']",
+      "div.share-box-feed-entry__closed-share-box div[contenteditable='true']",
+    ], 12000)
+    if (!editor || !setEditorText(editor, draft.data.post)) {
+      status('Failure - LinkedIn scheduled post editor was unavailable', 'failure')
+      return true
+    }
+    if (!(await countdown('Scheduled LinkedIn post'))) return true
+    const dialog = editor.closest("[role='dialog']") || document
+    const submit = findControl(/^(Post|Publish)$/i, dialog)
+    if (!submit || submit.disabled) {
+      status('Failure - LinkedIn scheduled post submit button was unavailable', 'failure')
+      return true
+    }
+    submit.click()
+    const deadline = Date.now() + 15000
+    let confirmed = false
+    while (Date.now() < deadline) {
+      const notices = feedbackText()
+      if (/post (?:was )?(?:created|published|shared)|successfully posted/i.test(notices) || !visible(editor)) {
+        confirmed = true
+        break
+      }
+      await sleep(300)
+    }
+    await api('/result', 'POST', {ok: confirmed, kind: confirmed ? 'linkedin_post' : undefined,
+      actionId: `linkedin:scheduled-post:${new Date().toISOString().slice(0, 10)}`,
+      reason: confirmed ? 'LinkedIn confirmed scheduled post' : 'LinkedIn did not confirm scheduled post'})
+    status(confirmed ? 'Success - scheduled LinkedIn post confirmed' : 'Failure - scheduled post was not confirmed',
+      confirmed ? 'success' : 'failure')
+    if (confirmed) await chrome.runtime.sendMessage({type: 'finishScheduledLinkedInPost', ok: true})
+    return true
+  }
   async function cycle() {
     panel()
     if (busy || paused || !location.pathname.startsWith('/feed')) return
@@ -903,10 +1070,13 @@
       const config = settings.platforms.linkedin
       if (!config.enabled) return status('Blank state - LinkedIn automation disabled', 'blank')
       const foundPosts = posts()
+      const candidatePosts = foundPosts.filter((item) => !processed.has(item.key))
       await maybeRunDailyFollowups(config)
       const response = await api('/cycle', 'POST', {
-        posts: foundPosts,
+        posts: candidatePosts,
         topics: config.topics,
+        writingStyle: settings.writingStyle,
+        safeguards: settings.replySafeguards,
         features: {
           likes: config.likes,
           comments: config.comments,
@@ -927,23 +1097,27 @@
         },
       })
       if (!response?.ok) {
-        status('Start Python: python linkedin_bot.py')
+        status(`Failure - browser intelligence unavailable: ${response?.data?.error || response?.error || 'unknown error'}`, 'failure')
         return
       }
       const info = response.data
-      foundPosts
+      candidatePosts
         .slice(0, info.checked || 0)
         .forEach((item) => processed.add(item.key))
       status(
         info.action
-          ? `Ollama selected post ${info.action.index + 1} of ${info.received}`
+          ? `Ollama selected post ${info.action.index + 1} of ${info.received} — ${info.action.comment ? info.action.draftReason : 'no approved comment draft'}`
           : `Scanned ${info.received} posts — ${info.last_reason || 'none relevant yet'}`,
       )
-      if (info.action) await execute(info.action)
+      const actionResult = info.action ? await execute(info.action) : null
+      if (actionResult?.preserveStatus) {
+        await moveToNext()
+        return
+      }
       status(`Processed ${processed.size} posts — moving down`)
       await moveToNext()
     } catch (error) {
-      status('Python bridge unavailable')
+      status(`Failure - browser intelligence unavailable: ${String(error).slice(0, 140)}`, 'failure')
     } finally {
       busy = false
     }
@@ -954,6 +1128,7 @@
     const settings = await CodeCrafterSettings.load()
     if (!settings.platforms.linkedin.enabled)
       return status('Blank state - LinkedIn automation disabled', 'blank')
+    if (await runScheduledLinkedInPost()) return
     const notificationTask = await chrome.runtime.sendMessage({ type: 'getNotificationTask' })
     if (notificationTask?.task && settings.platforms.linkedin.notificationReplies)
       return handleNotificationReply(notificationTask.task)

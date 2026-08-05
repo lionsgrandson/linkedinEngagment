@@ -2,8 +2,8 @@
   if (location.hostname !== 'web.whatsapp.com' || window.__codeCrafterWhatsAppBridge) return
   window.__codeCrafterWhatsAppBridge = true
 
-  const EXTENSION_VERSION = '3.18.5'
-  const EXTENSION_BUILD = '08861639905a'
+  const EXTENSION_VERSION = '3.20.8'
+  const EXTENSION_BUILD = '6df01dcb2ab1'
   const processed = new Set()
   const instanceId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`
   let busy = false
@@ -16,6 +16,39 @@
   }
   const visible = (node) => node && node.offsetParent !== null
   const text = (node) => (node?.innerText || node?.textContent || '').replace(/\s+/g, ' ').trim()
+
+  const messageDirection = (row) => {
+    const bubble = row.closest('.message-in,.message-out') || row.querySelector('.message-in,.message-out')
+    if (bubble?.classList.contains('message-out') || row.querySelector("[aria-label='You:']")) return 'OUTBOUND'
+    if (bubble?.classList.contains('message-in')) return 'INBOUND'
+    const labels = [...row.querySelectorAll('[aria-label]')].map((node) => node.getAttribute('aria-label') || '')
+    return labels.includes('You:') ? 'OUTBOUND' : labels.some((value) => value.endsWith(':')) ? 'INBOUND' : ''
+  }
+
+  const messageBody = (row) => {
+    for (const selector of [
+      "[data-testid='selectable-text']", 'span.selectable-text', "[data-testid='msg-text']",
+      '.copyable-text span[dir]', '.copyable-text',
+    ]) {
+      const value = text(row.querySelector(selector))
+      if (value) return value
+    }
+    return text(row).replace(/\s+\d{1,2}:\d{2}(?:\s*[AP]M)?(?:\s+Edited)?$/i, '').trim()
+  }
+
+  const latestInboundMessage = (context) => String(context || '').split('\n')
+    .filter((line) => line.startsWith('INBOUND:'))
+    .at(-1)?.slice('INBOUND:'.length).trim() || ''
+
+  const normalizePhone = (value) => {
+    let source = String(value || '')
+    try { source = decodeURIComponent(source) } catch (_error) { /* raw DOM value is still usable */ }
+    source = source.replace(/^00/, '+')
+    const jid = source.match(/(?:^|[^\d])(\d{7,15})@(?:c|s)\.us/i)?.[1]
+    const candidate = jid || source.match(/(?:^|[^\d+])(\+?\d[\d\s().-]{5,}\d)(?:$|[^\d])/i)?.[1] || ''
+    const digits = candidate.replace(/\D/g, '')
+    return digits.length >= 7 && digits.length <= 15 ? `${candidate.trim().startsWith('+') ? '+' : ''}${digits}` : ''
+  }
 
   const fingerprint = (value) => {
     let hash = 2166136261
@@ -31,9 +64,27 @@
     return navigator.locks.request(`codecrafter-whatsapp-${transactionId}`, callback)
   }
 
-  async function claimTransaction(contact, context) {
+  function latestInboundMessageIdentity() {
+    const rows = [...document.querySelectorAll("[data-testid='msg-container'],.message-in")]
+      .filter((row) => !row.closest("[aria-label='Chat list']"))
+      .filter(visible)
+    for (const row of rows.reverse()) {
+      if (messageDirection(row) !== 'INBOUND') continue
+      const candidates = [row, ...row.querySelectorAll('[data-id],[data-lid],[data-testid]')]
+      for (const candidate of candidates) {
+        for (const attribute of ['data-id', 'data-lid']) {
+          const value = candidate.getAttribute?.(attribute)
+          if (value) return `${attribute}:${value}`
+        }
+      }
+      return `dom:${fingerprint(`${messageBody(row)}\n${text(row)}`)}`
+    }
+    return ''
+  }
+
+  async function claimTransaction(contact, context, inboundIdentity) {
     const latestInbound = context.trim().split('\n').filter((line) => line.startsWith('INBOUND:')).at(-1) || ''
-    const transactionId = `wa:${fingerprint(`${contact}\n${latestInbound}`)}`
+    const transactionId = `wa:${fingerprint(`${contact}\n${latestInbound}\n${inboundIdentity}`)}`
     return withTransactionLock(transactionId, async () => {
       const stored = await chrome.storage.local.get('ccWhatsAppSendTransactions')
       const now = Date.now()
@@ -50,7 +101,11 @@
         existing = {...existing, state: 'uncertain', updatedAt: now}
         transactions[transactionId] = existing
       }
-      if (existing && ['drafting', 'sending', 'confirmed', 'uncertain', 'rejected'].includes(existing.state)) {
+      if (existing?.state === 'rejected') {
+        delete transactions[transactionId]
+        existing = null
+      }
+      if (existing && ['drafting', 'sending', 'confirmed', 'uncertain'].includes(existing.state)) {
         return {claimed: false, transactionId, state: existing.state}
       }
       if (existing?.retryAfter && existing.retryAfter > now) {
@@ -168,21 +223,34 @@
     return selected?.closest("[role='row'],[role='listitem'],[aria-selected='true']") || selected
   }
 
+  function conversationPhone() {
+    const active = activeConversation()
+    const nodes = [
+      active,
+      ...[...document.querySelectorAll("[data-testid='msg-container']")].filter(visible).slice(-30),
+      ...[...document.querySelectorAll("header a[href^='tel:'],header [data-id],header [data-lid],header [title],header [aria-label]")].filter(visible),
+    ].filter(Boolean)
+    for (const node of nodes) {
+      const candidates = [node, ...node.querySelectorAll('[data-id],[data-lid],a[href^="tel:"]')]
+      for (const candidate of candidates) {
+        for (const attribute of ['data-id', 'data-lid', 'href', 'title', 'aria-label']) {
+          const phone = normalizePhone(candidate.getAttribute?.(attribute))
+          if (phone) return phone
+        }
+      }
+    }
+    return ''
+  }
+
   function conversationContext() {
     const rows = [...document.querySelectorAll("[data-testid='msg-container']")]
       .filter((row) => !row.closest("[aria-label='Chat list']"))
       .filter(visible)
       .slice(-30)
       .map((row) => {
-        const senderLabels = [...row.querySelectorAll('[aria-label]')]
-          .map((node) => node.getAttribute('aria-label') || '')
-          .filter((value) => value.endsWith(':'))
-        const direction = senderLabels.includes('You:')
-          ? 'OUTBOUND'
-          : senderLabels.length
-            ? 'INBOUND'
-            : ''
-        return direction ? `${direction}: ${text(row)}` : ''
+        const direction = messageDirection(row)
+        const body = messageBody(row)
+        return direction && body ? `${direction}: ${body}` : ''
       })
       .filter((line) => line.length > 10 && !/^(?:INBOUND|OUTBOUND):\s*\d{1,2}:\d{2}$/.test(line))
     if (rows.length) return rows.join('\n').slice(-10000)
@@ -190,7 +258,7 @@
       .filter(visible)
       .slice(-30)
       .map((node) => {
-        return `${node.classList.contains('message-in') ? 'INBOUND' : 'OUTBOUND'}: ${text(node)}`
+        return `${node.classList.contains('message-in') ? 'INBOUND' : 'OUTBOUND'}: ${messageBody(node)}`
       })
       .filter((line) => line.length > 10 && !/^(?:INBOUND|OUTBOUND):\s*\d{1,2}:\d{2}$/.test(line))
       .join('\n')
@@ -253,7 +321,49 @@
     const isGroup = Boolean(header?.querySelector(
       "[data-icon*='group' i],[data-testid*='group' i],[aria-label*='group' i]",
     ))
-    return {contact: title, isGroup}
+    return {contact: title, phone: normalizePhone(title) || conversationPhone(), isGroup}
+  }
+
+  function contactInfoPhone() {
+    const markers = [...document.querySelectorAll('div,span')]
+      .filter(visible)
+      .filter((node) => /^About and phone number$/i.test(text(node)))
+    for (const marker of markers) {
+      let scope = marker.parentElement
+      for (let depth = 0; scope && depth < 8; depth += 1, scope = scope.parentElement) {
+        const candidates = [...scope.querySelectorAll('span[title],span.selectable-text,span,div')]
+          .filter(visible)
+          .map((node) => normalizePhone(text(node)))
+          .filter(Boolean)
+        if (candidates.length) return candidates.at(-1)
+      }
+    }
+    return ''
+  }
+
+  async function revealConversationPhone(contact) {
+    let phone = contactInfoPhone()
+    if (phone) return phone
+    const header = [...document.querySelectorAll('header')].filter(visible).at(-1)
+    const opener = [...(header?.querySelectorAll('button,[role="button"]') || [])]
+      .filter(visible)
+      .find((button) => {
+        const value = `${button.getAttribute('aria-label') || ''} ${text(button)}`.trim()
+        return /profile details/i.test(value) ||
+          (contact && value.toLocaleLowerCase().startsWith(contact.toLocaleLowerCase()))
+      })
+    if (!opener) return ''
+    opener.click()
+    const deadline = Date.now() + 5000
+    while (!phone && Date.now() < deadline) {
+      await sleep(200)
+      phone = contactInfoPhone()
+    }
+    const close = [...document.querySelectorAll("button[aria-label='Close'],button")]
+      .filter(visible)
+      .find((button) => /^Close$/i.test(`${button.getAttribute('aria-label') || ''} ${text(button)}`.trim()))
+    close?.click()
+    return phone
   }
 
   const normalizeEditorText = (value) => String(value || '')
@@ -279,38 +389,48 @@
     if (value) {
       input.focus()
       const inserted = document.execCommand('insertText', false, value)
-      if (!inserted && !normalizeEditorText(input.innerText || input.textContent)) input.textContent = value
-      input.dispatchEvent(new InputEvent('input', {
-        bubbles: true, inputType: 'insertText', data: value,
-      }))
+      if (!inserted && !normalizeEditorText(input.innerText || input.textContent)) {
+        input.textContent = value
+        input.dispatchEvent(new InputEvent('input', {
+          bubbles: true, inputType: 'insertText', data: value,
+        }))
+      }
     }
     const expected = normalizeEditorText(value)
     const deadline = Date.now() + 3000
+    let exactObservations = 0
     while (Date.now() < deadline) {
       const liveInput = editor()
       const candidates = [...new Set([input, liveInput].filter(Boolean))]
-      if (candidates.some((node) => normalizeEditorText(node.innerText || node.textContent) === expected)) return true
-      if (sendButton() && candidates.some((node) => normalizeEditorText(node.innerText || node.textContent))) return true
+      const values = candidates.map((node) => normalizeEditorText(node.innerText || node.textContent))
+      if (values.some((value) => value === expected)) {
+        exactObservations += 1
+        if (exactObservations >= 3) return true
+      } else {
+        exactObservations = 0
+        if (values.some(Boolean)) return false
+      }
       await sleep(100)
     }
     return false
   }
 
-  function exactOutgoingMessage(message) {
-    const wanted = String(message || '').replace(/\s+/g, ' ').trim()
-    return Boolean(wanted) && [...document.querySelectorAll("[data-testid='msg-container']")]
+  function exactOutgoingMessageCount(message) {
+    const wanted = normalizeEditorText(message)
+    if (!wanted) return 0
+    return [...document.querySelectorAll("[data-testid='msg-container']")]
       .filter(visible)
-      .some((row) => {
+      .filter((row) => {
         const outgoing = row.querySelector("[aria-label='You:'],[data-icon='msg-check'],[data-icon='msg-dblcheck']") ||
           row.closest('.message-out') || row.classList.contains('message-out')
-        return Boolean(outgoing) && text(row).includes(wanted)
-      })
+        return Boolean(outgoing) && normalizeEditorText(messageBody(row)) === wanted
+      }).length
   }
 
-  async function waitForExactOutgoingMessage(message, timeout = 12000) {
+  async function waitForExactOutgoingMessage(message, previousCount = 0, timeout = 12000) {
     const deadline = Date.now() + timeout
     while (Date.now() < deadline) {
-      if (exactOutgoingMessage(message)) return true
+      if (exactOutgoingMessageCount(message) > previousCount) return true
       await sleep(250)
     }
     return false
@@ -365,7 +485,7 @@
         return
       }
       key = text(conversation).slice(0, 500)
-      if (!key || processed.has(key)) return
+      if (!key) return
       const client = clientName(conversation)
       const automaticClient = config.topics.some(
         (name) => name.localeCompare(client, undefined, {sensitivity: 'accent'}) === 0,
@@ -378,12 +498,8 @@
         throw new Error('WhatsApp chat did not open')
       }
       const identity = conversationIdentity(client)
-      const policy = CodeCrafterSettings.replyDecision(settings, identity.contact, identity.isGroup)
-      if (!policy.allowed) {
-        processed.add(key)
-        status(`Blank state - ${policy.reason}`, 'blank')
-        return
-      }
+      if (!identity.phone && !identity.isGroup)
+        identity.phone = await revealConversationPhone(identity.contact)
       const context = conversationContext()
       if (!context) throw new Error('conversation could not be read')
       if (!context.trim().split('\n').at(-1).startsWith('INBOUND:')) {
@@ -391,7 +507,10 @@
         status('Blank state - latest message is not inbound', 'blank')
         return
       }
-      const claim = await claimTransaction(identity.contact, context)
+      const inboundIdentity = latestInboundMessageIdentity()
+      key = `${identity.contact}:${inboundIdentity || fingerprint(context)}`
+      if (processed.has(key)) return
+      const claim = await claimTransaction(identity.contact, context, inboundIdentity)
       activeTransaction = claim.transactionId
       if (!claim.claimed) {
         processed.add(key)
@@ -415,10 +534,12 @@
       })
       if (!response?.ok || !response.data.allowed || !response.data.message) {
         await updateTransaction(activeTransaction, {
-          state: 'rejected', reason: response?.data?.reason || 'no safe reply',
+          state: 'failed',
+          reason: response?.data?.reason || 'reply service unavailable',
+          retryAfter: Date.now() + 10000,
         })
-        processed.add(key)
-        status(`Blank state - ${response?.data?.reason || 'no safe reply'}`, 'blank')
+        processed.delete(key)
+        status(`Failure - ${response?.data?.reason || 'reply service unavailable'}; retrying automatically`, 'failure')
         return
       }
       const input = editor()
@@ -442,11 +563,13 @@
         return
       }
       sendStarted = true
+      const previousExactCount = exactOutgoingMessageCount(response.data.message)
       send.scrollIntoView({block: 'nearest', inline: 'nearest'})
       send.focus()
       send.click()
-      let confirmed = await waitForExactOutgoingMessage(response.data.message, 20000)
-      if (!confirmed && !text(input)) confirmed = await waitForExactOutgoingMessage(response.data.message, 15000)
+      let confirmed = await waitForExactOutgoingMessage(response.data.message, previousExactCount, 20000)
+      if (!confirmed && !text(input))
+        confirmed = await waitForExactOutgoingMessage(response.data.message, previousExactCount, 15000)
       await updateTransaction(activeTransaction, {
         state: confirmed ? 'confirmed' : 'uncertain',
         confirmedAt: confirmed ? new Date().toISOString() : '',
@@ -466,8 +589,9 @@
             occurredAt: new Date().toISOString(),
             channel: 'whatsapp',
             contact: identity.contact,
-            phone: /^\+?[\d\s().-]{7,}$/.test(identity.contact) ? identity.contact : '',
-            inboundContext: context,
+            phone: identity.phone,
+            inboundContext: latestInboundMessage(context),
+            conversationHistory: context,
             outboundMessage: response.data.message,
             status: 'sent',
             actionId: activeTransaction,

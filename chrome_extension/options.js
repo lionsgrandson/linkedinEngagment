@@ -115,12 +115,26 @@
   async function start() {
     document.getElementById('version').textContent = `v${chrome.runtime.getManifest().version}`
     settings = await CodeCrafterSettings.load()
+    const ollamaUrl = document.getElementById('ollama-url')
+    const ollamaModel = document.getElementById('ollama-model')
+    const runtimeState = document.getElementById('browser-runtime-state')
+    ollamaUrl.value = settings.browserRuntime.ollamaUrl
+    ollamaModel.value = settings.browserRuntime.ollamaModel
+    const syncBrowserRuntime = () => {
+      settings.browserRuntime.ollamaUrl = ollamaUrl.value.trim()
+      settings.browserRuntime.ollamaModel = ollamaModel.value.trim()
+    }
+    ollamaUrl.oninput = syncBrowserRuntime
+    ollamaModel.oninput = syncBrowserRuntime
     const showOverlay = document.getElementById('show-overlay')
     const compactOverlay = document.getElementById('compact-overlay')
+    const minimizedOverlay = document.getElementById('minimized-overlay')
     showOverlay.checked = settings.ui.showOverlay
     compactOverlay.checked = settings.ui.compactOverlay
+    minimizedOverlay.checked = settings.ui.minimizedOverlay
     showOverlay.onchange = () => { settings.ui.showOverlay = showOverlay.checked }
     compactOverlay.onchange = () => { settings.ui.compactOverlay = compactOverlay.checked }
+    minimizedOverlay.onchange = () => { settings.ui.minimizedOverlay = minimizedOverlay.checked }
     const styleSource = document.getElementById('style-source')
     const styleContent = document.getElementById('style-content')
     const styleCount = document.getElementById('style-count')
@@ -167,6 +181,55 @@
       input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', syncSafeguards)
     }
     syncSafeguards()
+    const scheduledPosts = document.getElementById('linkedin-scheduled-posts')
+    const postDays = document.getElementById('linkedin-post-days')
+    const postHour = document.getElementById('linkedin-post-hour')
+    scheduledPosts.checked = settings.platforms.linkedin.scheduledPosts
+    postDays.value = settings.platforms.linkedin.postEveryDays
+    postHour.value = settings.platforms.linkedin.postHour
+    const groupMonitoring = document.getElementById('facebook-group-monitoring')
+    const groupUrls = document.getElementById('facebook-group-urls')
+    const groupIntent = document.getElementById('facebook-group-intent')
+    const groupDelay = document.getElementById('facebook-group-delay')
+    groupMonitoring.checked = settings.platforms.facebook.groupMonitoring
+    groupUrls.value = settings.platforms.facebook.groupUrls.join('\n')
+    groupIntent.value = settings.platforms.facebook.groupIntent
+    groupDelay.value = settings.platforms.facebook.groupCommentDelaySeconds
+    const syncAutomation = () => {
+      settings.platforms.linkedin.scheduledPosts = scheduledPosts.checked
+      settings.platforms.linkedin.postEveryDays = Math.max(1, Math.min(365, Number(postDays.value) || 3))
+      settings.platforms.linkedin.postHour = Math.max(0, Math.min(23, Number(postHour.value) || 0))
+      settings.platforms.facebook.groupMonitoring = groupMonitoring.checked
+      settings.platforms.facebook.groupUrls = [...new Set(groupUrls.value.split(/\r?\n/)
+        .map((value) => value.trim()).filter(Boolean))]
+      settings.platforms.facebook.groupIntent = groupIntent.value.trim()
+      settings.platforms.facebook.groupCommentDelaySeconds = Math.max(5, Math.min(60, Number(groupDelay.value) || 10))
+    }
+    for (const input of [scheduledPosts, postDays, postHour, groupMonitoring, groupUrls, groupIntent, groupDelay])
+      input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', syncAutomation)
+    document.getElementById('test-browser-runtime').onclick = async () => {
+      syncBrowserRuntime(); syncSafeguards(); syncAutomation()
+      settings = await CodeCrafterSettings.save(settings)
+      runtimeState.textContent = 'Loading — asking the browser runtime to read your saved context…'
+      runtimeState.dataset.phase = 'loading'
+      let result
+      try {
+        result = await chrome.runtime.sendMessage({type: 'localApi', path: '/settings-audit', method: 'POST', body: {}})
+      } catch (error) {
+        const stale = String(error).includes('Extension context invalidated') || !chrome.runtime?.id
+        runtimeState.textContent = stale
+          ? 'Failure — this settings page is stale after the extension reload. Refresh this page, then test again.'
+          : `Failure — browser runtime could not be reached: ${String(error).slice(0, 180)}`
+        runtimeState.dataset.phase = 'failure'
+        return
+      }
+      const data = result?.data || {}
+      const passed = Boolean(result?.ok && data.ok)
+      runtimeState.textContent = passed
+        ? `Success — browser read ${data.writingStyleCharacters} writing-style and ${data.businessFactCharacters} business-information characters; Ollama model ${data.model} responded.`
+        : `Failure — ${data.error || result?.error || 'the extension returned no audit result. Refresh this settings page after reloading the extension, then test again.'}`
+      runtimeState.dataset.phase = passed ? 'success' : 'failure'
+    }
     const crmProvider = document.getElementById('crm-provider')
     const crmWebhookUrl = document.getElementById('crm-webhook-url')
     const crmApiToken = document.getElementById('crm-api-token')
@@ -229,13 +292,13 @@
         type: 'localApi', path: '/', method: 'GET',
       })
       if (!bridge?.ok) {
-        crmState.textContent = 'Failure — CodeCrafter Client is not running. Start the desktop app, then try again.'
+        crmState.textContent = 'Failure — browser runtime is unavailable. Reload the extension, then try again.'
         crmState.dataset.phase = 'failure'
         return false
       }
       const bridgeVersion = String(bridge.data?.version || 'unknown')
       if (bridgeVersion !== expectedVersion) {
-        crmState.textContent = `Failure — desktop bridge ${bridgeVersion} is still running. Close it and start CodeCrafter Client ${expectedVersion}, then try again.`
+        crmState.textContent = `Failure — browser runtime ${bridgeVersion} is stale. Reload extension ${expectedVersion}, then try again.`
         crmState.dataset.phase = 'failure'
         return false
       }
@@ -246,7 +309,7 @@
       crmState.textContent = connected
         ? 'Success — CodeCrafter CRM is connected and ready.'
         : result?.status === 404 || /not found/i.test(result?.data?.error || '')
-          ? `Failure — CodeCrafter Client ${expectedVersion} must be restarted before CRM setup can finish.`
+          ? `Failure — reload browser extension ${expectedVersion} before CRM setup can finish.`
           : `Failure — ${result?.data?.error || result?.error || 'the CRM rejected the connection test.'}`
       crmState.dataset.phase = connected ? 'success' : 'failure'
       return connected
@@ -298,10 +361,13 @@
       try {
         syncSafeguards()
         syncCrm()
+        syncBrowserRuntime()
+        syncAutomation()
         const whatsapp = settings.platforms.whatsapp
         whatsapp.optedIn = whatsapp.enabled && whatsapp.messages
         whatsapp.consentRevision = whatsapp.optedIn ? 2 : 0
         settings = await CodeCrafterSettings.save(settings)
+        await chrome.runtime.sendMessage({type: 'refreshBrowserAutomation'})
         status('Success — settings saved and active.', 'success')
       }
       catch (error) { status(`Failure — ${String(error)}`, 'failure') }
@@ -319,7 +385,7 @@
     }
     document.getElementById('open-dashboard').onclick = async () => {
       status('Opening statistics dashboard…', 'loading')
-      await chrome.tabs.create({url: 'http://127.0.0.1:8765/dashboard', active: true})
+      await chrome.tabs.create({url: chrome.runtime.getURL('dashboard.html'), active: true})
       status('Success — dashboard opened.', 'success')
     }
   }

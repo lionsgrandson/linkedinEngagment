@@ -2,8 +2,8 @@
   if (window.__codeCrafterInstagramBridge || location.pathname.startsWith('/direct')) return
   window.__codeCrafterInstagramBridge = true
 
-  const EXTENSION_VERSION = '3.18.5'
-  const EXTENSION_BUILD = '08861639905a'
+  const EXTENSION_VERSION = '3.20.8'
+  const EXTENSION_BUILD = '6df01dcb2ab1'
   const processedPosts = new Set()
   const viewedStoryFrames = new Set()
   const PROFILE_STATE_KEY = 'ccInstagramProfileBatch'
@@ -492,7 +492,7 @@
           diagnostics: { extensionVersion: EXTENSION_VERSION, extensionBuild: EXTENSION_BUILD },
         })
         if (!availability?.ok) {
-          status('Failure - start Python with: python linkedin_bot.py', 'failure')
+          status(`Failure - browser intelligence unavailable: ${availability?.data?.error || availability?.error || 'unknown error'}`, 'failure')
         } else if (availability.data.shouldWatchStories && config.stories) {
           await startStoryBatch()
         } else {
@@ -513,7 +513,7 @@
     extensionBuild: EXTENSION_BUILD,
     url: location.href,
   }).then((heartbeat) => {
-    if (!heartbeat?.ok) status('Failure - start Python with: python linkedin_bot.py', 'failure')
+    if (!heartbeat?.ok) status(`Failure - browser intelligence unavailable: ${heartbeat?.data?.error || heartbeat?.error || 'unknown error'}`, 'failure')
   })
   setInterval(cycle, 6000)
   cycle()

@@ -3,13 +3,14 @@
     ui: {
       showOverlay: true,
       compactOverlay: true,
+      minimizedOverlay: true,
     },
     writingStyle: {
       sourceType: 'summary',
-      content: '',
+      content: 'Write in a concise, warm, practical first-person voice. Respond directly to the specific post. Sound human, avoid generic praise and hype, and never claim personal familiarity or results that are not verified.',
     },
     replySafeguards: {
-      businessFacts: '',
+      businessFacts: 'Moshe Schwartzberg builds custom websites, landing pages, web applications, ecommerce stores, CRM systems, and business automations. Website: https://mosheschwartzberg.com. Invite relevant prospects to review the website or make contact there.',
       conversationScope: 'all',
       contactMode: 'all',
       allowedContacts: [],
@@ -23,6 +24,11 @@
         enabled: false,
       },
     },
+    browserRuntime: {
+      mode: 'browser',
+      ollamaUrl: 'http://127.0.0.1:11434',
+      ollamaModel: 'qwen3.5:9b',
+    },
     platforms: {
       linkedin: {
         enabled: true,
@@ -34,6 +40,9 @@
         notificationInterrupts: false,
         imageRecognition: true,
         messages: false,
+        scheduledPosts: true,
+        postEveryDays: 3,
+        postHour: 10,
         topics: [
           'web development', 'B2B startups', 'personal growth', 'Zionism',
           'technology', 'software development', 'artificial intelligence',
@@ -65,6 +74,10 @@
         dailyLikeLimit: 0,
         dailyFollowLimit: 20,
         messages: false,
+        groupMonitoring: false,
+        groupUrls: [],
+        groupCommentDelaySeconds: 10,
+        groupIntent: 'People asking for a website, web application, landing page, online store, automation, CRM, or software-development help.',
         topics: [],
       },
       whatsapp: {
@@ -83,16 +96,17 @@
     if (saved?.ui) {
       result.ui.showOverlay = saved.ui.showOverlay !== false
       result.ui.compactOverlay = saved.ui.compactOverlay !== false
+      result.ui.minimizedOverlay = saved.ui.minimizedOverlay !== false
     }
     if (saved?.writingStyle) {
       result.writingStyle.sourceType = saved.writingStyle.sourceType === 'samples'
         ? 'samples'
         : 'summary'
-      result.writingStyle.content = String(saved.writingStyle.content || '').trim().slice(0, 20000)
+      result.writingStyle.content = String(saved.writingStyle.content || result.writingStyle.content).trim().slice(0, 20000)
     }
     if (saved?.replySafeguards) {
       const policy = saved.replySafeguards
-      result.replySafeguards.businessFacts = String(policy.businessFacts || '').trim().slice(0, 30000)
+      result.replySafeguards.businessFacts = String(policy.businessFacts || result.replySafeguards.businessFacts).trim().slice(0, 30000)
       result.replySafeguards.conversationScope = ['all', 'direct', 'groups'].includes(policy.conversationScope)
         ? policy.conversationScope : 'all'
       result.replySafeguards.contactMode = policy.contactMode === 'allowlist' ? 'allowlist' : 'all'
@@ -110,23 +124,45 @@
       result.integrations.crm.apiToken = String(crm.apiToken || '').trim().slice(0, 4000)
       result.integrations.crm.enabled = crm.enabled === true && result.integrations.crm.provider !== 'none'
     }
+    if (saved?.browserRuntime) {
+      const runtime = saved.browserRuntime
+      result.browserRuntime.mode = 'browser'
+      result.browserRuntime.ollamaUrl = String(runtime.ollamaUrl || result.browserRuntime.ollamaUrl)
+        .trim().replace(/\/+$/, '').slice(0, 500)
+      result.browserRuntime.ollamaModel = String(runtime.ollamaModel || result.browserRuntime.ollamaModel)
+        .trim().slice(0, 200)
+      if (result.browserRuntime.ollamaModel === 'qwen3:8b')
+        result.browserRuntime.ollamaModel = 'qwen3.5:9b'
+    }
     for (const [platform, values] of Object.entries(saved?.platforms || {})) {
       if (!result.platforms[platform]) continue
       result.platforms[platform] = { ...result.platforms[platform], ...values }
       result.platforms[platform].topics = Array.isArray(values.topics)
         ? values.topics.map((topic) => String(topic).trim()).filter(Boolean)
         : result.platforms[platform].topics
+      if (platform === 'facebook') {
+        result.platforms.facebook.groupUrls = Array.isArray(values.groupUrls)
+          ? [...new Set(values.groupUrls.map((value) => String(value).trim())
+            .filter((value) => /^https:\/\/(?:www\.)?facebook\.com\/groups\//i.test(value)))]
+            .slice(0, 100)
+          : []
+        result.platforms.facebook.groupIntent = String(
+          values.groupIntent || result.platforms.facebook.groupIntent,
+        ).trim().slice(0, 5000)
+      }
       if ('profileLikeCount' in result.platforms[platform]) {
         const count = Number(values.profileLikeCount)
         result.platforms[platform].profileLikeCount = Number.isFinite(count)
           ? Math.max(1, Math.min(100, Math.round(count)))
           : result.platforms[platform].profileLikeCount
       }
-      for (const key of ['dailyLikeLimit', 'dailyFollowLimit', 'storyIntervalLikes', 'storyBatchLimit']) {
+      for (const key of ['dailyLikeLimit', 'dailyFollowLimit', 'storyIntervalLikes', 'storyBatchLimit',
+        'postEveryDays', 'postHour', 'groupCommentDelaySeconds']) {
         if (!(key in result.platforms[platform])) continue
         const value = Number(values[key])
-        const minimum = key === 'storyIntervalLikes' ? 1 : 0
-        if (Number.isFinite(value)) result.platforms[platform][key] = Math.max(minimum, Math.min(10000, Math.round(value)))
+        const minimum = ['storyIntervalLikes', 'postEveryDays'].includes(key) ? 1 : 0
+        const maximum = key === 'postHour' ? 23 : key === 'groupCommentDelaySeconds' ? 60 : 10000
+        if (Number.isFinite(value)) result.platforms[platform][key] = Math.max(minimum, Math.min(maximum, Math.round(value)))
       }
       if (platform === 'whatsapp') {
         const revision = Number(values.consentRevision)

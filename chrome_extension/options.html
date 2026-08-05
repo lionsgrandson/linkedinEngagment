@@ -20,6 +20,7 @@
       <div class="features">
         <label class="feature switch"><input id="show-overlay" type="checkbox"><span></span><em>Show status popup</em></label>
         <label class="feature switch"><input id="compact-overlay" type="checkbox"><span></span><em>Use compact popup</em></label>
+        <label class="feature switch"><input id="minimized-overlay" type="checkbox"><span></span><em>Start popup minimized at the bottom</em></label>
       </div>
     </section>
     <section class="style-card" aria-labelledby="style-title">
@@ -75,6 +76,50 @@
         </label>
       </div>
       <p class="policy-note">Blocked contacts always take priority over every other setting.</p>
+    </section>
+    <section class="style-card" aria-labelledby="browser-runtime-title">
+      <div>
+        <p class="site-label">Browser-only runtime</p>
+        <h2 id="browser-runtime-title">Local AI connection</h2>
+        <p>The extension calls Ollama directly. No Python script or desktop bridge is required for LinkedIn and Facebook automation.</p>
+      </div>
+      <div class="safeguard-grid">
+        <label class="style-source">Ollama URL
+          <input id="ollama-url" type="url" placeholder="http://127.0.0.1:11434">
+        </label>
+        <label class="style-source">Ollama model
+          <input id="ollama-model" type="text" placeholder="qwen3.5:9b">
+        </label>
+      </div>
+      <button id="test-browser-runtime" class="secondary" type="button">Test settings and writing context</button>
+      <p id="browser-runtime-state" class="policy-note" data-phase="blank">Blank state — browser intelligence has not been tested.</p>
+    </section>
+    <section class="style-card" aria-labelledby="linkedin-posting-title">
+      <div>
+        <p class="site-label">LinkedIn publishing</p>
+        <h2 id="linkedin-posting-title">Scheduled posts</h2>
+        <p>Generate posts from your topics, verified business information, and writing style.</p>
+      </div>
+      <div class="safeguard-grid">
+        <label class="feature switch"><input id="linkedin-scheduled-posts" type="checkbox"><span></span><em>Publish scheduled LinkedIn posts</em></label>
+        <label class="number-setting"><span>Post every number of days</span><input id="linkedin-post-days" type="number" min="1" max="365"></label>
+        <label class="number-setting"><span>Local posting hour (0–23)</span><input id="linkedin-post-hour" type="number" min="0" max="23"></label>
+      </div>
+    </section>
+    <section class="style-card" aria-labelledby="facebook-groups-title">
+      <div>
+        <p class="site-label">Facebook opportunities</p>
+        <h2 id="facebook-groups-title">New group post monitoring</h2>
+        <p>Keep configured groups open in background tabs, detect posts that appear after monitoring begins, and comment only when the post matches the requested intent.</p>
+      </div>
+      <label class="feature switch"><input id="facebook-group-monitoring" type="checkbox"><span></span><em>Monitor configured Facebook groups</em></label>
+      <label class="style-source">Facebook group URLs — one per line
+        <textarea id="facebook-group-urls" rows="6" placeholder="https://www.facebook.com/groups/example"></textarea>
+      </label>
+      <label class="style-source">What kind of new post should receive a comment?
+        <textarea id="facebook-group-intent" rows="4"></textarea>
+      </label>
+      <label class="number-setting"><span>Wait before commenting (5–60 seconds)</span><input id="facebook-group-delay" type="number" min="5" max="60"></label>
     </section>
     <section class="style-card crm-card" aria-labelledby="crm-title">
       <div>
