@@ -212,22 +212,29 @@
       settings = await CodeCrafterSettings.save(settings)
       runtimeState.textContent = 'Loading — asking the browser runtime to read your saved context…'
       runtimeState.dataset.phase = 'loading'
-      let result
+      let data
       try {
-        result = await chrome.runtime.sendMessage({type: 'localApi', path: '/settings-audit', method: 'POST', body: {}})
+        if (!globalThis.CodeCrafterNativeBackend?.handle)
+          throw new Error('browser audit module is unavailable; reload this settings page')
+        data = await Promise.race([
+          CodeCrafterNativeBackend.handle('/settings-audit', 'POST', {}),
+          new Promise((_, reject) => setTimeout(
+            () => reject(new Error('Ollama did not answer the settings audit within 45 seconds')),
+            45000,
+          )),
+        ])
       } catch (error) {
         const stale = String(error).includes('Extension context invalidated') || !chrome.runtime?.id
         runtimeState.textContent = stale
           ? 'Failure — this settings page is stale after the extension reload. Refresh this page, then test again.'
-          : `Failure — browser runtime could not be reached: ${String(error).slice(0, 180)}`
+          : `Failure — browser runtime audit failed: ${String(error).slice(0, 180)}`
         runtimeState.dataset.phase = 'failure'
         return
       }
-      const data = result?.data || {}
-      const passed = Boolean(result?.ok && data.ok)
+      const passed = Boolean(data?.ok)
       runtimeState.textContent = passed
         ? `Success — browser read ${data.writingStyleCharacters} writing-style and ${data.businessFactCharacters} business-information characters; Ollama model ${data.model} responded.`
-        : `Failure — ${data.error || result?.error || 'the extension returned no audit result. Refresh this settings page after reloading the extension, then test again.'}`
+        : `Failure — ${data?.error || `Ollama returned an unexpected audit response: ${String(data?.response || 'blank').slice(0, 80)}`}`
       runtimeState.dataset.phase = passed ? 'success' : 'failure'
     }
     const crmProvider = document.getElementById('crm-provider')

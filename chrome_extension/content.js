@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.20.11'
-  const EXTENSION_BUILD = 'f73ae138ae03'
+  const EXTENSION_VERSION = '3.20.12'
+  const EXTENSION_BUILD = 'd71c10aa2cab'
   const COMMENT_MAX_CHARS = 500
   const POLITICAL_POST = /\b(?:politic(?:s|al|ian)?|election|ballot|government|parliament|congress|senate|president|prime minister|minister|democrat|republican|labou?r party|likud|knesset|coalition|opposition|geopolitic|zionis[mt]|gaza|palestin(?:e|ian)|hamas|hezbollah|netanyahu|trump|biden|war in (?:israel|ukraine))\b|(?:\u05e4\u05d5\u05dc\u05d9\u05d8\u05d9\u05e7|\u05d1\u05d7\u05d9\u05e8\u05d5\u05ea|\u05de\u05de\u05e9\u05dc\u05d4|\u05db\u05e0\u05e1\u05ea|\u05e7\u05d5\u05d0\u05dc\u05d9\u05e6\u05d9\u05d4|\u05d0\u05d5\u05e4\u05d5\u05d6\u05d9\u05e6\u05d9\u05d4|\u05e6\u05d9\u05d5\u05e0\u05d5\u05ea|\u05e0\u05ea\u05e0\u05d9\u05d4\u05d5|\u05e2\u05d6\u05d4|\u05e4\u05dc\u05e1\u05d8\u05d9\u05e0|\u05d7\u05de\u05d0\u05e1|\u05d7\u05d9\u05d6\u05d1\u05d0\u05dc\u05dc\u05d4)/iu
   let paused = false

@@ -51,6 +51,15 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("chrome.runtime.getURL('dashboard.html')", Path("chrome_extension/options.js").read_text(encoding="utf-8"))
         self.assertTrue(Path("chrome_extension/dashboard.js").exists())
 
+    def test_settings_audit_runs_directly_in_the_browser_page(self):
+        html = Path("chrome_extension/options.html").read_text(encoding="utf-8")
+        options = Path("chrome_extension/options.js").read_text(encoding="utf-8")
+        self.assertLess(html.index('src="settings.js"'), html.index('src="native_backend.js"'))
+        self.assertLess(html.index('src="native_backend.js"'), html.index('src="options.js"'))
+        self.assertIn("CodeCrafterNativeBackend.handle('/settings-audit'", options)
+        self.assertIn("within 45 seconds", options)
+        self.assertNotIn("the extension returned no audit result", options)
+
     def test_linkedin_three_day_schedule_and_facebook_group_monitoring_are_browser_owned(self):
         settings = Path("chrome_extension/settings.js").read_text(encoding="utf-8")
         worker = Path("chrome_extension/service_worker.js").read_text(encoding="utf-8")

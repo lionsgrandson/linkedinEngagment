@@ -2,8 +2,8 @@
   if (location.hostname !== 'web.whatsapp.com' || window.__codeCrafterWhatsAppBridge) return
   window.__codeCrafterWhatsAppBridge = true
 
-  const EXTENSION_VERSION = '3.20.11'
-  const EXTENSION_BUILD = 'f73ae138ae03'
+  const EXTENSION_VERSION = '3.20.12'
+  const EXTENSION_BUILD = 'd71c10aa2cab'
   const processed = new Set()
   const instanceId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`
   let busy = false
