@@ -109,11 +109,23 @@ const activateEveryOrganicLinkedInCommentOnce = async () => {
   await chrome.storage.local.set({[migrationKey]: true});
 };
 
+const activateSafeLinkedInCommentsOnce = async () => {
+  const migrationKey = "cc3211SafeLinkedInCommentsActivated";
+  if ((await chrome.storage.local.get(migrationKey))[migrationKey]) return;
+  const settings = await CodeCrafterSettings.load();
+  const politicalTopics = /politic|election|government|zionis|gaza|palestin|hamas|hezbollah|likud|knesset|\u05e4\u05d5\u05dc\u05d9\u05d8\u05d9\u05e7|\u05d1\u05d7\u05d9\u05e8\u05d5\u05ea|\u05e6\u05d9\u05d5\u05e0\u05d5\u05ea/i;
+  settings.platforms.linkedin.topics = settings.platforms.linkedin.topics
+    .filter((topic) => !politicalTopics.test(String(topic)));
+  await CodeCrafterSettings.save(settings);
+  await chrome.storage.local.set({[migrationKey]: true});
+};
+
 const configureBrowserAutomation = async () => {
   await activateRequestedLinkedInScheduleOnce();
   await activateRequestedLinkedInCommentsOnce();
   await activateRequestedPopupOnce();
   await activateEveryOrganicLinkedInCommentOnce();
+  await activateSafeLinkedInCommentsOnce();
   chrome.alarms.create("ccFacebookGroups", {periodInMinutes: 1});
   chrome.alarms.create("ccLinkedInScheduledPosts", {periodInMinutes: 5});
   await ensureFacebookGroupTabs();

@@ -7,7 +7,7 @@
     },
     writingStyle: {
       sourceType: 'summary',
-      content: 'Write in a concise, warm, practical first-person voice. Respond directly to the specific post. Sound human, avoid generic praise and hype, and never claim personal familiarity or results that are not verified.',
+      content: 'Write in a concise, warm, practical first-person voice. Match the post language exactly. Use one or two short sentences, no Markdown, no asterisks, no generic praise, no hype, and no corporate marketing language. Respond directly to a concrete detail in the post and never claim personal familiarity or results that are not verified.',
     },
     replySafeguards: {
       businessFacts: 'Moshe Schwartzberg builds custom websites, landing pages, web applications, ecommerce stores, CRM systems, and business automations. Website: https://mosheschwartzberg.com. Invite relevant prospects to review the website or make contact there.',
@@ -45,7 +45,7 @@
         postEveryDays: 3,
         postHour: 10,
         topics: [
-          'web development', 'B2B startups', 'personal growth', 'Zionism',
+          'web development', 'B2B startups', 'personal growth',
           'technology', 'software development', 'artificial intelligence',
         ],
       },

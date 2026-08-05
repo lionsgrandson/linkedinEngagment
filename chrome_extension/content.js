@@ -1,8 +1,10 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.20.10'
-  const EXTENSION_BUILD = '4c4b609b3dee'
+  const EXTENSION_VERSION = '3.20.11'
+  const EXTENSION_BUILD = 'f73ae138ae03'
+  const COMMENT_MAX_CHARS = 500
+  const POLITICAL_POST = /\b(?:politic(?:s|al|ian)?|election|ballot|government|parliament|congress|senate|president|prime minister|minister|democrat|republican|labou?r party|likud|knesset|coalition|opposition|geopolitic|zionis[mt]|gaza|palestin(?:e|ian)|hamas|hezbollah|netanyahu|trump|biden|war in (?:israel|ukraine))\b|(?:\u05e4\u05d5\u05dc\u05d9\u05d8\u05d9\u05e7|\u05d1\u05d7\u05d9\u05e8\u05d5\u05ea|\u05de\u05de\u05e9\u05dc\u05d4|\u05db\u05e0\u05e1\u05ea|\u05e7\u05d5\u05d0\u05dc\u05d9\u05e6\u05d9\u05d4|\u05d0\u05d5\u05e4\u05d5\u05d6\u05d9\u05e6\u05d9\u05d4|\u05e6\u05d9\u05d5\u05e0\u05d5\u05ea|\u05e0\u05ea\u05e0\u05d9\u05d4\u05d5|\u05e2\u05d6\u05d4|\u05e4\u05dc\u05e1\u05d8\u05d9\u05e0|\u05d7\u05de\u05d0\u05e1|\u05d7\u05d9\u05d6\u05d1\u05d0\u05dc\u05dc\u05d4)/iu
   let paused = false
   let busy = false
   const processed = new Set()
@@ -47,6 +49,31 @@
       ),
     )
   const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim()
+  const scriptFamily = (value) => {
+    const text = String(value || '')
+    const counts = {
+      he: (text.match(/[\u0590-\u05ff]/g) || []).length,
+      ar: (text.match(/[\u0600-\u06ff]/g) || []).length,
+      cyrl: (text.match(/[\u0400-\u04ff]/g) || []).length,
+      han: (text.match(/[\u3400-\u9fff]/g) || []).length,
+      latin: (text.match(/[A-Za-z\u00c0-\u024f]/g) || []).length,
+    }
+    const match = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
+    return match?.[1] >= 3 ? match[0] : 'unknown'
+  }
+  const finalCommentViolation = (postText, comment) => {
+    if (POLITICAL_POST.test(normalizeText(postText))) return 'political content is blocked'
+    if ([...String(comment || '')].length > COMMENT_MAX_CHARS) return `comment exceeds the ${COMMENT_MAX_CHARS}-character safety limit`
+    if (/```|\*\*|__|`|^\s{0,3}#{1,6}\s|^\s*[-*+]\s|\[[^\]]+\]\([^)]+\)/m.test(String(comment || '')))
+      return 'comment contains Markdown formatting'
+    const postScript = scriptFamily(postText)
+    const commentScript = scriptFamily(comment)
+    if (postScript !== 'unknown' && commentScript !== 'unknown' && postScript !== commentScript)
+      return 'comment language script does not match the post'
+    if (/^(?:this\s+is\s+)?(?:a\s+)?good\s+way\s+to\s+(?:fix|write)\s+(?:the\s+)?comment/i.test(normalizeText(comment)))
+      return 'comment contains model narration instead of a real response'
+    return ''
+  }
   const editorText = (editor) => normalizeText(
     editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement
       ? editor.value
@@ -396,6 +423,11 @@
       })
     node.scrollIntoView({ behavior: 'smooth', block: 'center' })
     await delay()
+    const unsafeDraft = action.comment ? finalCommentViolation(action.sourceText || action.key, action.comment) : ''
+    if (unsafeDraft) {
+      status(`Blank state - comment blocked: ${unsafeDraft}`, 'blank')
+      return api('/result', 'POST', {ok: false, kind: 'comment', reason: `final safeguard blocked: ${unsafeDraft}`})
+    }
     if (action.like) {
       const like = node.querySelector(
         "button[aria-label='Reaction button state: no reaction'],button[aria-label*='React Like'],button[aria-label*='Like']",
@@ -461,6 +493,13 @@
         reason: 'LinkedIn comment editor did not retain the draft text',
       })
     if (!(await countdown('Comment'))) return
+    const finalViolation = finalCommentViolation(action.sourceText || action.key, action.comment)
+    if (finalViolation) {
+      editor.textContent = ''
+      editor.dispatchEvent(new Event('input', {bubbles: true}))
+      status(`Blank state - comment blocked: ${finalViolation}`, 'blank')
+      return api('/result', 'POST', {ok: false, kind: 'comment', reason: `final pre-submit safeguard blocked: ${finalViolation}`})
+    }
     await expandComments(node)
     if (hasExactComment(node, action.comment)) {
       editor.textContent = ''

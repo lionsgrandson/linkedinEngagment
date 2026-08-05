@@ -347,6 +347,13 @@ def run_server(bot) -> None:
             features = data.get("features", {})
             logging.info("Scan received %d visible non-promoted posts", received)
             for item in data.get("posts", []):
+                if bot.is_political_post(item.get("text", "")):
+                    checked += 1
+                    last_reason = f"post {checked}: political content blocked"
+                    skipped.append({"index": item.get("index"), "score": 0,
+                                    "reason": "political content is never eligible for engagement",
+                                    "topics": []})
+                    continue
                 visual = ({"relevant": False, "reason": "visual recognition disabled"}
                           if not features.get("imageRecognition", False)
                           else bot.analyze_social_images("linkedin", item.get("mediaUrls", []), topics))
@@ -378,7 +385,10 @@ def run_server(bot) -> None:
                         data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
                         data.get("safeguards") if isinstance(data.get("safeguards"), dict) else None,
                     )
-                    review = bot.evaluate_comment(item["text"], draft)
+                    review = bot.evaluate_comment(
+                        item["text"], draft,
+                        data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
+                    )
                     if review.get("pass") and int(review.get("confidence", 0)) >= 75:
                         action["comment"] = draft
                 if not action["like"] and not action["comment"] and not action["connect"]:

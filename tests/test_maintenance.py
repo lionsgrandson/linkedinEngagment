@@ -32,7 +32,7 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("https://mosheschwartzberg.com", backend)
         self.assertIn("Post/comment relevance confirmed", backend)
         self.assertIn("Never refer to Moshe Schwartzberg in third person", backend)
-        self.assertIn("promotes services when the post did not ask for help", backend)
+        self.assertIn("unrelated service promotion", backend)
         self.assertIn("qwen3.5:9b", Path("chrome_extension/settings.js").read_text(encoding="utf-8"))
         self.assertIn("Use semantic meaning, not exact keyword matching", backend)
         self.assertNotIn("Both writing style and verified business information must be filled", backend)
@@ -40,8 +40,13 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("commentEveryOrganicPost", backend)
         self.assertIn("first visible non-sponsored post", backend)
         self.assertIn("!post.sponsored", backend)
-        self.assertIn("relatedWordOverlap", backend)
-        self.assertIn("shared concrete terms after reviewer retries", backend)
+        self.assertNotIn("shared concrete terms after reviewer retries", backend)
+        self.assertIn("COMMENT_MAX_CHARS = 500", backend)
+        self.assertIn("Political content is never eligible for a comment", backend)
+        self.assertIn("sameLanguage", backend)
+        self.assertIn("styleMatch", backend)
+        self.assertIn("Business information is factual reference only", backend)
+        self.assertIn("finalCommentViolation", Path("chrome_extension/content.js").read_text(encoding="utf-8"))
         self.assertIn("candidatePosts", Path("chrome_extension/content.js").read_text(encoding="utf-8"))
         self.assertIn("chrome.runtime.getURL('dashboard.html')", Path("chrome_extension/options.js").read_text(encoding="utf-8"))
         self.assertTrue(Path("chrome_extension/dashboard.js").exists())
@@ -108,6 +113,60 @@ class MaintenanceTests(unittest.TestCase):
         for raw, expected in cases.items():
             with self.subTest(raw=raw):
                 self.assertEqual(linkedin_bot.sanitize_comment(raw), expected)
+
+    def test_comment_safeguards_block_politics_language_mismatch_markdown_and_length(self):
+        self.assertTrue(linkedin_bot.is_political_post(
+            "The election campaign and government coalition are the focus of this post."
+        ))
+        self.assertIn("political", linkedin_bot.comment_violation(
+            "The election campaign begins today.", "A short response."
+        ))
+        self.assertIn("language", linkedin_bot.comment_violation(
+            "\u05d6\u05d4 \u05e4\u05d5\u05e1\u05d8 \u05d1\u05e2\u05d1\u05e8\u05d9\u05ea \u05e2\u05dc \u05e4\u05d9\u05ea\u05d5\u05d7 \u05ea\u05d5\u05db\u05e0\u05d4.",
+            "This answer is incorrectly written in English."
+        ))
+        self.assertIn("Markdown", linkedin_bot.comment_violation(
+            "A practical software engineering post.", "This is **too formatted**."
+        ))
+        self.assertIn("500", linkedin_bot.comment_violation(
+            "A practical software engineering post.", "x" * 501
+        ))
+        cleaned = linkedin_bot.sanitize_comment(
+            "This is a good way to fix the comment in this post: **Real response.**",
+            linkedin_bot.COMMENT_MAX_CHARS,
+        )
+        self.assertEqual(cleaned, "Real response.")
+        self.assertNotIn("**", linkedin_bot.sanitize_comment("**Plain** and `direct`."))
+
+    def test_political_topics_are_removed_from_saved_linkedin_settings(self):
+        worker = Path("chrome_extension/service_worker.js").read_text(encoding="utf-8")
+        settings = Path("chrome_extension/settings.js").read_text(encoding="utf-8")
+        self.assertIn("cc3211SafeLinkedInCommentsActivated", worker)
+        self.assertNotIn("'Zionism'", settings)
+
+    def test_comment_review_requires_saved_style_and_post_language(self):
+        style = {"sourceType": "summary", "content": "Use short, direct sentences."}
+        with patch.object(linkedin_bot, "ollama", return_value=json.dumps({
+            "pass": True, "reason": "related", "confidence": 95,
+            "same_language": False, "style_match": True,
+        })):
+            wrong_language = linkedin_bot.evaluate_comment(
+                "A practical English post about software.",
+                "A practical English response about software.", style,
+            )
+        self.assertFalse(wrong_language["pass"])
+        self.assertIn("language", wrong_language["reason"])
+
+        with patch.object(linkedin_bot, "ollama", return_value=json.dumps({
+            "pass": True, "reason": "related", "confidence": 95,
+            "same_language": True, "style_match": False,
+        })):
+            wrong_style = linkedin_bot.evaluate_comment(
+                "A practical English post about software.",
+                "A practical English response about software.", style,
+            )
+        self.assertFalse(wrong_style["pass"])
+        self.assertIn("writing style", wrong_style["reason"])
 
     def test_all_version_surfaces_match(self):
         expected = manage.version()
