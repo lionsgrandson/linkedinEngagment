@@ -100,7 +100,8 @@
     return {duplicate: false, count: metrics.totals[kind]}
   }
 
-  async function draftSocialComment(site, context, style, safeguards, intent = '', requiredWebsite = false) {
+  async function draftSocialComment(site, context, style, safeguards, intent = '', requiredWebsite = false,
+      feedComment = false) {
     if (!clean(context, 5000)) return {allowed: false, reason: 'The post text is blank.'}
     if (isPoliticalPost(context)) return {allowed: false, reason: 'Political content is never eligible for a comment.'}
     const analysis = parseJson(await ollama(`Identify the main language and whether this post is political.
@@ -114,6 +115,9 @@ Return only the comment. No label, quotation marks, analysis, or markdown.
 Write entirely in the post's main language (${postLanguage}). Do not switch languages; proper names and URLs are the only exceptions.
 Use at most two short sentences and ${COMMENT_MAX_CHARS} characters. Never use asterisks, Markdown emphasis, headings, or bullet lists.
 Write as Moshe in first person (I or we). Never refer to Moshe Schwartzberg in third person.
+Sound like a real person leaving a quick comment, not a content-marketing assistant. Use plain words and a natural rhythm.
+Avoid canned AI phrases such as "great insights", "this really resonates", "valuable perspective", "game changer",
+"in today's rapidly evolving world", "it's not just about", "a powerful reminder", or "couldn't agree more".
 If the author is explicitly requesting relevant help, make a concise helpful offer using only verified business facts.
 If the author is sharing an insight rather than asking for help, add one useful observation or question and do not pitch services or mention a website.
 Never claim that we already know the author or have delivered an unverified result.
@@ -130,6 +134,8 @@ ${requiredWebsite ? `Include ${PUBLIC_WEBSITE} naturally in the comment.` : ''}`
       const usedMarkdown = hasMarkdown(rawComment)
       const comment = fitComment(rawComment, requiredWebsite)
       if (!comment) continue
+      if (feedComment)
+        return {allowed: true, comment, reason: 'Non-political feed post received a sendable comment.'}
       if (!languageCompatible(context, comment)) {
         lastReason = 'Comment language script does not match the post.'
         continue
@@ -252,7 +258,7 @@ POSTS:\n${eligible.map(({post, index}) => `[${index}] ${clean(post.text, 1800)}`
       const item = posts[index]
       const commentResult = features.comments === false ? {allowed: false} : await draftSocialComment(
         'LinkedIn', item.text, body.writingStyle || settings.writingStyle,
-        body.safeguards || settings.replySafeguards,
+        body.safeguards || settings.replySafeguards, '', false, true,
       )
       if (features.comments !== false && !commentResult.allowed && features.likes === false && features.connections !== true)
         return {received: posts.length, checked: index + 1, action: null,

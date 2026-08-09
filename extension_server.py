@@ -354,12 +354,17 @@ def run_server(bot) -> None:
                                     "reason": "political content is never eligible for engagement",
                                     "topics": []})
                     continue
-                visual = ({"relevant": False, "reason": "visual recognition disabled"}
-                          if not features.get("imageRecognition", False)
-                          else bot.analyze_social_images("linkedin", item.get("mediaUrls", []), topics))
-                visual_context = (f"\nVISIBLE IMAGE ANALYSIS: {visual.get('reason', '')}; "
-                                  f"topics={visual.get('topics', [])}" if visual.get("relevant") else "")
-                analysis = bot.relevant_post(item.get("text", "") + visual_context, topics)
+                comment_every_post = features.get("commentEveryOrganicPost", True)
+                if comment_every_post:
+                    analysis = {"relevant": True, "reason": "every non-political post is eligible",
+                                "score": 100, "topics": []}
+                else:
+                    visual = ({"relevant": False, "reason": "visual recognition disabled"}
+                              if not features.get("imageRecognition", False)
+                              else bot.analyze_social_images("linkedin", item.get("mediaUrls", []), topics))
+                    visual_context = (f"\nVISIBLE IMAGE ANALYSIS: {visual.get('reason', '')}; "
+                                      f"topics={visual.get('topics', [])}" if visual.get("relevant") else "")
+                    analysis = bot.relevant_post(item.get("text", "") + visual_context, topics)
                 checked += 1
                 last_reason = f"post {checked}: {analysis.get('score', 0)}/100 — {analysis.get('reason', 'no reason')}"
                 logging.info("Ollama checked %s", last_reason)
@@ -385,11 +390,8 @@ def run_server(bot) -> None:
                         data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
                         data.get("safeguards") if isinstance(data.get("safeguards"), dict) else None,
                     )
-                    review = bot.evaluate_comment(
-                        item["text"], draft,
-                        data.get("writingStyle") if isinstance(data.get("writingStyle"), dict) else None,
-                    )
-                    if review.get("pass") and int(review.get("confidence", 0)) >= 75:
+                    review = bot.approve_feed_comment(item["text"], draft)
+                    if review.get("pass"):
                         action["comment"] = draft
                 if not action["like"] and not action["comment"] and not action["connect"]:
                     logging.info("Post %s was already handled; moving on", checked)

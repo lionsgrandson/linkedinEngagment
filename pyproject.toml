@@ -1,6 +1,6 @@
 [project]
 name = "linkedin-engagement-copilot"
-version = "3.20.12"
+version = "3.20.13"
 description = "Local Ollama-powered, observable LinkedIn engagement copilot"
 requires-python = ">=3.11"
 dependencies = [

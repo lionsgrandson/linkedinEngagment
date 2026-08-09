@@ -6,8 +6,8 @@
     (platform === 'facebook' && location.pathname.startsWith('/messages'))
   if (!platform || !onInbox || window.__codeCrafterInboxBridge) return
   window.__codeCrafterInboxBridge = true
-  const EXTENSION_VERSION = '3.20.12'
-  const EXTENSION_BUILD = 'd71c10aa2cab'
+  const EXTENSION_VERSION = '3.20.13'
+  const EXTENSION_BUILD = '6717c4f6f2c5'
   const processed = new Set()
   let busy = false
   let emptyScans = 0

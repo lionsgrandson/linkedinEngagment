@@ -177,6 +177,37 @@ class MaintenanceTests(unittest.TestCase):
         self.assertFalse(wrong_style["pass"])
         self.assertIn("writing style", wrong_style["reason"])
 
+    def test_feed_comment_policy_only_skips_politics_or_unusable_blank_output(self):
+        political = linkedin_bot.approve_feed_comment(
+            "The election and coalition are the subject of this post.", "A comment."
+        )
+        blank = linkedin_bot.approve_feed_comment("A product update.", "   ")
+        generic = linkedin_bot.approve_feed_comment(
+            "A product update.", "Interesting approach. Thanks for sharing."
+        )
+        filled = linkedin_bot.approve_feed_comment(
+            "A team reduced deploy time by simplifying its release process.",
+            "Keeping the release path simple usually makes it easier for the whole team to trust it.",
+        )
+        self.assertFalse(political["pass"])
+        self.assertIn("political", political["reason"])
+        self.assertFalse(blank["pass"])
+        self.assertIn("blank", blank["reason"])
+        self.assertTrue(generic["pass"])
+        self.assertTrue(filled["pass"])
+
+    def test_browser_feed_comments_bypass_the_strict_editor(self):
+        backend = Path("chrome_extension/native_backend.js").read_text(encoding="utf-8")
+        content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
+        server = Path("extension_server.py").read_text(encoding="utf-8")
+        self.assertIn("if (feedComment)", backend)
+        self.assertIn("Non-political feed post received a sendable comment", backend)
+        self.assertIn("approve_feed_comment", server)
+        final_guard = content.split("const finalCommentViolation", 1)[1].split("const editorText", 1)[0]
+        self.assertIn("political content is blocked", final_guard)
+        for removed_gate in ("Markdown formatting", "language script", "safety limit", "model narration"):
+            self.assertNotIn(removed_gate, final_guard)
+
     def test_all_version_surfaces_match(self):
         expected = manage.version()
         self.assertEqual(linkedin_bot.APP_VERSION, expected)

@@ -30,7 +30,7 @@ from playwright.sync_api import BrowserContext, Page, TimeoutError as Playwright
 from playwright.sync_api import sync_playwright
 
 
-APP_VERSION = "3.20.12"
+APP_VERSION = "3.20.13"
 ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", ROOT))
 STOP_FILE = ROOT / "STOP"
@@ -591,6 +591,10 @@ never label it as a proposed, possible, or good response and never write "as Mos
 in the post's main language. Use no Markdown, asterisks, headings, or bullet lists. Use at most two
 short sentences and {COMMENT_MAX_CHARS} characters. The writing instructions control the voice;
 business facts are reference data and must not turn the comment into corporate marketing copy.
+Sound like a real person leaving a quick comment, not a content-marketing assistant. Use plain words
+and a natural rhythm. Avoid canned AI phrases such as "great insights", "this really resonates",
+"valuable perspective", "game changer", "in today's rapidly evolving world", "it's not just about",
+"a powerful reminder", or "couldn't agree more".
 
 {writing_style_guidance(writing_style)}
 
@@ -598,6 +602,15 @@ business facts are reference data and must not turn the comment into corporate m
 
 POST:\n{post_text[:5000]}"""
     return sanitize_comment(ollama(prompt), COMMENT_MAX_CHARS)
+
+
+def approve_feed_comment(post_text: str, comment: str) -> dict[str, Any]:
+    """Apply the feed policy: skip politics, but do not reject usable generated comments."""
+    if is_political_post(post_text):
+        return {"pass": False, "reason": "political content is blocked", "confidence": 100}
+    if not str(comment or "").strip():
+        return {"pass": False, "reason": "comment generation returned blank text", "confidence": 0}
+    return {"pass": True, "reason": "non-political post has a sendable comment", "confidence": 100}
 
 
 def notification_reply_violation(latest_reply: str, reply: str) -> str:
@@ -1530,7 +1543,7 @@ def maybe_comment(page: Page, post: Any, text: str, state: dict[str, Any]) -> No
     if state["comments"] >= SETTINGS.max_comments_per_day:
         return
     draft = generate_comment(text)
-    review = evaluate_comment(text, draft)
+    review = approve_feed_comment(text, draft)
     logging.info("Comment review: %s", review)
     if not review.get("pass") or int(review.get("confidence", 0)) < 75:
         logging.warning("Rejected draft: %s", review.get("reason", "unknown"))

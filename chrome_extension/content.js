@@ -1,8 +1,8 @@
 ;(() => {
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
-  const EXTENSION_VERSION = '3.20.12'
-  const EXTENSION_BUILD = 'd71c10aa2cab'
+  const EXTENSION_VERSION = '3.20.13'
+  const EXTENSION_BUILD = '6717c4f6f2c5'
   const COMMENT_MAX_CHARS = 500
   const POLITICAL_POST = /\b(?:politic(?:s|al|ian)?|election|ballot|government|parliament|congress|senate|president|prime minister|minister|democrat|republican|labou?r party|likud|knesset|coalition|opposition|geopolitic|zionis[mt]|gaza|palestin(?:e|ian)|hamas|hezbollah|netanyahu|trump|biden|war in (?:israel|ukraine))\b|(?:\u05e4\u05d5\u05dc\u05d9\u05d8\u05d9\u05e7|\u05d1\u05d7\u05d9\u05e8\u05d5\u05ea|\u05de\u05de\u05e9\u05dc\u05d4|\u05db\u05e0\u05e1\u05ea|\u05e7\u05d5\u05d0\u05dc\u05d9\u05e6\u05d9\u05d4|\u05d0\u05d5\u05e4\u05d5\u05d6\u05d9\u05e6\u05d9\u05d4|\u05e6\u05d9\u05d5\u05e0\u05d5\u05ea|\u05e0\u05ea\u05e0\u05d9\u05d4\u05d5|\u05e2\u05d6\u05d4|\u05e4\u05dc\u05e1\u05d8\u05d9\u05e0|\u05d7\u05de\u05d0\u05e1|\u05d7\u05d9\u05d6\u05d1\u05d0\u05dc\u05dc\u05d4)/iu
   let paused = false
@@ -63,15 +63,6 @@
   }
   const finalCommentViolation = (postText, comment) => {
     if (POLITICAL_POST.test(normalizeText(postText))) return 'political content is blocked'
-    if ([...String(comment || '')].length > COMMENT_MAX_CHARS) return `comment exceeds the ${COMMENT_MAX_CHARS}-character safety limit`
-    if (/```|\*\*|__|`|^\s{0,3}#{1,6}\s|^\s*[-*+]\s|\[[^\]]+\]\([^)]+\)/m.test(String(comment || '')))
-      return 'comment contains Markdown formatting'
-    const postScript = scriptFamily(postText)
-    const commentScript = scriptFamily(comment)
-    if (postScript !== 'unknown' && commentScript !== 'unknown' && postScript !== commentScript)
-      return 'comment language script does not match the post'
-    if (/^(?:this\s+is\s+)?(?:a\s+)?good\s+way\s+to\s+(?:fix|write)\s+(?:the\s+)?comment/i.test(normalizeText(comment)))
-      return 'comment contains model narration instead of a real response'
     return ''
   }
   const editorText = (editor) => normalizeText(
