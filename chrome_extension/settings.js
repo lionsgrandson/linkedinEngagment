@@ -226,5 +226,54 @@
     return {allowed: true, reason: 'reply policy allows this conversation'}
   }
 
+  function installLinkedInActionGuard() {
+    if (globalThis.__ccLinkedInActionGuard || location.hostname !== 'www.linkedin.com') return
+    globalThis.__ccLinkedInActionGuard = true
+    const original = chrome.runtime.sendMessage.bind(chrome.runtime)
+    const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim()
+    const feedNodes = () => {
+      const legacy = [...document.querySelectorAll('div.feed-shared-update-v2')]
+      if (legacy.length) return legacy
+      return [...document.querySelectorAll('h2')]
+        .filter((heading) => heading.textContent.trim() === 'Feed post')
+        .map((heading) => heading.closest("[role='listitem']"))
+        .filter((node, index, all) => node && all.indexOf(node) === index)
+    }
+    const currentIndex = (action) => {
+      const wanted = normalize(action?.sourceText || action?.key)
+        .replace(/^Feed post\s*/i, '').slice(0, 300)
+      if (!wanted) return -1
+      const signature = wanted.slice(0, Math.min(180, wanted.length))
+      return feedNodes().findIndex((node) => {
+        const current = normalize(node.innerText).replace(/^Feed post\s*/i, '')
+        return current.startsWith(signature) || current.includes(signature)
+      })
+    }
+    try {
+      chrome.runtime.sendMessage = (...args) => {
+        const message = args[0]
+        const callbackMode = typeof args[args.length - 1] === 'function'
+        if (callbackMode || message?.type !== 'localApi' || message?.path !== '/cycle')
+          return original(...args)
+        const pending = original(...args)
+        return Promise.resolve(pending).then((response) => {
+          const action = response?.data?.action
+          if (!action) return response
+          const index = currentIndex(action)
+          if (index < 0) {
+            response.data.action = null
+            response.data.last_reason = 'Selected LinkedIn post moved before the action. Skipped it and will rescan.'
+            return response
+          }
+          action.index = index
+          return response
+        })
+      }
+    } catch (_error) {
+      globalThis.__ccLinkedInActionGuard = false
+    }
+  }
+
+  installLinkedInActionGuard()
   globalThis.CodeCrafterSettings = { DEFAULT_SETTINGS, load, save, matchesTopics, replyDecision }
 })()
