@@ -4,12 +4,15 @@
   if (window.__codeCrafterBridge) return
   window.__codeCrafterBridge = true
 
-  const VERSION = '3.20.14'
+  const VERSION = '3.20.16'
   const CYCLE_MS = 3500
   const SUBMIT_COUNTDOWN_MS = 2500
   const ACTION_SETTLE_MIN_MS = 1200
   const ACTION_SETTLE_MAX_MS = 2200
+  const HANDLED_STORAGE_KEY = 'ccLinkedInHandledPosts'
+  const HANDLED_TTL_MS = 30 * 24 * 60 * 60 * 1000
   const processed = new Set()
+  const persistentHandled = new Set()
   let busy = false
   let paused = false
 
@@ -18,6 +21,33 @@
   const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim()
   const api = (path, method = 'GET', body = null) =>
     chrome.runtime.sendMessage({type: 'localApi', path, method, body})
+
+  const handledReady = chrome.storage.local.get(HANDLED_STORAGE_KEY).then((stored) => {
+    const now = Date.now()
+    const entries = stored[HANDLED_STORAGE_KEY] && typeof stored[HANDLED_STORAGE_KEY] === 'object'
+      ? stored[HANDLED_STORAGE_KEY] : {}
+    for (const [key, value] of Object.entries(entries)) {
+      const at = Number(value?.at || value || 0)
+      if (key && at && now - at < HANDLED_TTL_MS) persistentHandled.add(key)
+    }
+  }).catch(() => {})
+
+  async function markHandled(key, state = 'handled') {
+    if (!key) return
+    processed.add(key)
+    persistentHandled.add(key)
+    try {
+      const stored = await chrome.storage.local.get(HANDLED_STORAGE_KEY)
+      const current = stored[HANDLED_STORAGE_KEY] && typeof stored[HANDLED_STORAGE_KEY] === 'object'
+        ? stored[HANDLED_STORAGE_KEY] : {}
+      current[key] = {at: Date.now(), state}
+      const pruned = Object.fromEntries(Object.entries(current)
+        .filter(([, value]) => Date.now() - Number(value?.at || value || 0) < HANDLED_TTL_MS)
+        .sort((a, b) => Number(b[1]?.at || b[1] || 0) - Number(a[1]?.at || a[1] || 0))
+        .slice(0, 1500))
+      await chrome.storage.local.set({[HANDLED_STORAGE_KEY]: pruned})
+    } catch (_error) {}
+  }
 
   function panel() {
     if (document.getElementById('cc-fast-feed-controls')) return
@@ -76,9 +106,19 @@
   }
 
   function commentRoots(root) {
-    return [...root.querySelectorAll(
+    const legacy = [...root.querySelectorAll(
       ".comments-comment-item,[data-view-name='comment-item'],[data-urn*='comment']",
-    )].filter(visible)
+    )]
+    const replyRoots = [...root.querySelectorAll("button,[role='button']")]
+      .filter((control) => visible(control) && /^Reply$/i.test(normalize(control.textContent || control.getAttribute('aria-label'))))
+      .map((control) => {
+        let current = control.parentElement
+        for (let depth = 0; current && depth < 8; depth += 1, current = current.parentElement) {
+          if (current.querySelector("a[href*='/in/']") && normalize(current.innerText).length > 20) return current
+        }
+        return null
+      }).filter(Boolean)
+    return [...new Set([...legacy, ...replyRoots])].filter(visible)
   }
 
   function commentAuthor(root) {
@@ -98,12 +138,15 @@
   }
 
   function postIdentity(node, postText) {
-    const urnNode = node.closest('[data-urn]') || node.querySelector('[data-urn]')
-    const urn = urnNode?.getAttribute('data-urn') || node.getAttribute('data-id') || ''
-    if (urn) return urn
-    const activity = [...node.querySelectorAll("a[href*='/feed/update/'],a[href*='/posts/']")]
-      .map((link) => link.href).find(Boolean)
-    return activity || postText.slice(0, 300)
+    const urnCandidates = [
+      node.getAttribute('data-urn'),
+      node.getAttribute('data-id'),
+      node.closest('[data-urn]')?.getAttribute('data-urn'),
+      node.querySelector('[data-urn]')?.getAttribute('data-urn'),
+    ].filter(Boolean)
+    const activity = [...node.querySelectorAll("a[href*='/feed/update/'],a[href*='/posts/'],a[href*='activity-']")]
+      .map((link) => link.href.split('?')[0]).find(Boolean)
+    return urnCandidates[0] || activity || postText.slice(0, 500)
   }
 
   function extractPosts() {
@@ -127,11 +170,20 @@
           .map((element) => element.currentSrc || element.src || element.poster || '')
           .filter(Boolean).slice(0, 3),
       }
-    }).filter((item) => item.text.length > 30 && !item.sponsored && !processed.has(item.key)).slice(0, 6)
+    }).filter((item) => item.text.length > 30 && !item.sponsored && !item.alreadyCommented &&
+      !processed.has(item.key) && !persistentHandled.has(item.key)).slice(0, 6)
   }
 
   function findActionNode(action) {
-    const signature = normalize(action.sourceText || action.key).replace(/^Feed post\s*/i, '').slice(0, 180)
+    const wantedKey = String(action.key || '')
+    if (wantedKey) {
+      const exact = postNodes().find((node) => postIdentity(
+        node,
+        normalize(node.innerText).replace(/^Feed post\s*/i, '').slice(0, 5000),
+      ) === wantedKey)
+      if (exact) return exact
+    }
+    const signature = normalize(action.sourceText || '').replace(/^Feed post\s*/i, '').slice(0, 180)
     if (!signature) return null
     return postNodes().find((node) => {
       const current = normalize(node.innerText).replace(/^Feed post\s*/i, '')
@@ -169,7 +221,7 @@
   async function confirmComment(root, expected, timeout = 8000) {
     const deadline = Date.now() + timeout
     while (Date.now() < deadline) {
-      if (hasExactComment(root, expected)) return true
+      if (hasExactComment(root, expected) || hasOwnComment(root)) return true
       const feedback = normalize(document.querySelector("[role='alert'],.artdeco-toast-item")?.textContent)
       if (/couldn.?t|failed|try again|something went wrong/i.test(feedback)) return false
       await sleep(200)
@@ -186,6 +238,7 @@
   async function execute(action) {
     const node = findActionNode(action)
     if (!node) {
+      await markHandled(action.key, 'moved_before_action')
       status('LinkedIn moved the selected post. Skipping it and rescanning.')
       return false
     }
@@ -210,6 +263,7 @@
     }
 
     if (!action.comment) {
+      await markHandled(action.key, 'non_comment_action')
       if (action.connect) await queueConnection(action.authorUrl)
       return true
     }
@@ -221,28 +275,36 @@
     await sleep(450)
 
     if (hasOwnComment(node)) {
+      await markHandled(action.key, 'existing_comment')
       status('Skipped duplicate: you already commented on this post.')
       return true
     }
     if (hasExactComment(node, action.comment)) {
+      await markHandled(action.key, 'exact_comment_visible')
       status('Skipped duplicate: the exact comment is already visible.')
       return true
     }
 
     const editor = await waitForEditor(node)
     if (!editor) {
-      status('Comment editor was not found. The post will be retried later.')
+      await markHandled(action.key, 'editor_missing')
+      status('Comment editor was not found. Skipping this post to avoid duplicate retries.')
       return false
     }
     if (!setEditorText(editor, action.comment)) {
-      status('LinkedIn did not retain the comment draft. Retrying later.')
+      await markHandled(action.key, 'draft_not_retained')
+      status('LinkedIn did not retain the draft. Skipping this post to avoid duplicate retries.')
       return false
     }
-    if (!(await countdown('Comment'))) return false
+    if (!(await countdown('Comment'))) {
+      await markHandled(action.key, 'paused_before_submit')
+      return false
+    }
 
     if (hasOwnComment(node) || hasExactComment(node, action.comment)) {
       editor.textContent = ''
       editor.dispatchEvent(new Event('input', {bubbles: true}))
+      await markHandled(action.key, 'duplicate_prevented')
       status('Duplicate comment prevented before submit.')
       return true
     }
@@ -252,27 +314,37 @@
         .filter(visible)
         .find((button) => /^(Comment|Post)$/i.test(normalize(button.textContent)) && !button.disabled)
     if (!submit || submit.disabled) {
-      status('Comment Send button is not ready. The post will be retried.')
+      await markHandled(action.key, 'submit_unavailable')
+      status('Comment Send button is not ready. Skipping this post to avoid duplicate retries.')
       return false
     }
 
+    // Lock the post BEFORE clicking submit. If LinkedIn accepts the comment but its DOM does not
+    // expose the new comment to our confirmation selector, the next cycle must never submit again.
+    await markHandled(action.key, 'submit_attempted')
     submit.click()
     const confirmed = await confirmComment(node, action.comment)
+    await markHandled(action.key, confirmed ? 'comment_confirmed' : 'comment_unconfirmed_no_retry')
     await api('/result', 'POST', {
       ok: confirmed,
       kind: confirmed ? 'comment' : undefined,
       actionId: `linkedin:comment:${action.key}:${normalize(action.comment).slice(0, 160)}`,
-      reason: confirmed ? 'LinkedIn displayed the exact fast feed comment' : 'LinkedIn did not confirm the comment',
+      reason: confirmed
+        ? 'LinkedIn displayed the submitted fast feed comment'
+        : 'Comment submit was attempted but confirmation was unavailable; post locked to prevent duplicate submission',
     })
-    status(confirmed ? 'Comment posted. Moving to the next post.' : 'Comment was not confirmed. It will be retried.')
+    status(confirmed
+      ? 'Comment posted. Moving to the next post.'
+      : 'Comment submit was attempted. Moving on without retrying this post.')
     if (confirmed && action.connect) await queueConnection(action.authorUrl)
-    return confirmed
+    return true
   }
 
   async function cycle() {
     if (busy || paused) return
     busy = true
     try {
+      await handledReady
       const settings = await CodeCrafterSettings.load()
       const config = settings.platforms.linkedin
       if (!config?.enabled) {
@@ -283,7 +355,7 @@
       if (!candidates.length) {
         status('No new visible posts. Scrolling for more...')
         postNodes().at(-1)?.scrollIntoView({behavior: 'smooth', block: 'end'})
-        window.scrollBy({top: 650, behavior: 'smooth'})
+        window.scrollBy({top: 750, behavior: 'smooth'})
         await settle()
         return
       }
@@ -304,25 +376,33 @@
       })
       if (!response?.ok) {
         status(`Ollama error: ${response?.data?.error || response?.error || 'unknown error'}`)
+        await settle()
+        window.scrollBy({top: 400, behavior: 'smooth'})
         return
       }
 
       const info = response.data || {}
       if (!info.action) {
-        candidates.slice(0, Math.max(1, Number(info.checked || 1))).forEach((item) => processed.add(item.key))
+        const checked = candidates.slice(0, Math.max(1, Number(info.checked || 1)))
+        for (const item of checked) await markHandled(item.key, 'reviewed_no_action')
         status(`No action selected. ${info.last_reason || 'Moving on.'}`)
+        window.scrollBy({top: 500, behavior: 'smooth'})
         await settle()
         return
       }
 
+      // Reserve immediately so overlapping DOM changes or later cycles cannot select this post again.
+      processed.add(info.action.key)
       const succeeded = await execute(info.action)
-      if (succeeded) processed.add(info.action.key)
+      if (!persistentHandled.has(info.action.key))
+        await markHandled(info.action.key, succeeded ? 'handled' : 'skipped_after_attempt')
       const node = findActionNode(info.action)
       node?.scrollIntoView({behavior: 'smooth', block: 'end'})
-      window.scrollBy({top: 500, behavior: 'smooth'})
+      window.scrollBy({top: 650, behavior: 'smooth'})
       await settle()
     } catch (error) {
       status(`Feed automation error: ${String(error).slice(0, 180)}`)
+      window.scrollBy({top: 350, behavior: 'smooth'})
     } finally {
       busy = false
     }
