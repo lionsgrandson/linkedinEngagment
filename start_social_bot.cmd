@@ -33,24 +33,34 @@ if errorlevel 1 (
 )
 
 echo [1/5] Starting Ollama if needed...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "try { Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
-if errorlevel 1 start "CodeCrafter Ollama" /min ollama serve
-
 set "OLLAMA_READY=0"
-for /L %%I in (1,1,30) do (
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-    "try { Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
-  if not errorlevel 1 (
-    set "OLLAMA_READY=1"
-    goto ollama_ready
+
+rem The Ollama CLI uses the same local server as the browser extension.
+rem On some Windows systems PowerShell Invoke-RestMethod can fail even while Ollama is healthy,
+rem so use a successful CLI request as the primary readiness check.
+ollama list >nul 2>&1
+if not errorlevel 1 set "OLLAMA_READY=1"
+
+if "%OLLAMA_READY%"=="0" (
+  start "CodeCrafter Ollama" /min ollama serve
+  for /L %%I in (1,1,30) do (
+    timeout /t 1 /nobreak >nul
+    ollama list >nul 2>&1
+    if not errorlevel 1 (
+      set "OLLAMA_READY=1"
+      goto ollama_ready
+    )
   )
-  timeout /t 1 /nobreak >nul
 )
 
 :ollama_ready
 if not "%OLLAMA_READY%"=="1" (
-  echo [ERROR] Ollama did not become ready on http://127.0.0.1:11434
+  echo [ERROR] Ollama did not become ready.
+  echo.
+  echo Try this command in another CMD window:
+  echo   ollama list
+  echo.
+  echo If that command works, run this launcher again.
   pause
   exit /b 1
 )
