@@ -16,6 +16,12 @@ class BrowserRuntimeContracts(unittest.TestCase):
         self.assertIn('Post/comment relevance confirmed', self.native)
         self.assertNotIn("if (feedComment)\n        return {allowed: true, comment", self.native)
 
+    def test_linkedin_revalidates_selected_post_after_ai_delay(self):
+        self.assertIn('installLinkedInActionGuard', self.settings)
+        self.assertIn("message?.path !== '/cycle'", self.settings)
+        self.assertIn('Selected LinkedIn post moved before the action', self.settings)
+        self.assertIn('action.index = index', self.settings)
+
     def test_notification_replies_are_not_discarded(self):
         self.assertIn("ccLinkedInRepliedNotifications", self.native)
         self.assertIn("available.slice(0, 25)", self.native)
