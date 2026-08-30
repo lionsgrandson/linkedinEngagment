@@ -113,12 +113,10 @@ if not exist "%READY_MARKER%" (
   echo       Extension setup was already completed.
 )
 
-echo [4/5] Opening the live automation pages...
+echo [4/5] Opening LinkedIn feed...
 start "" "%CHROME%" "https://www.linkedin.com/feed/"
-start "" "%CHROME%" "https://www.linkedin.com/messaging/?cc_auto_messages=1"
-start "" "%CHROME%" "https://www.linkedin.com/notifications/?filter=all&cc_followups=1"
-start "" "%CHROME%" "https://www.linkedin.com/mynetwork/invitation-manager/received/?cc_auto_invites=1"
-start "" "%CHROME%" "https://web.whatsapp.com/?cc_auto_messages=1"
+echo       Message, notification, invitation and WhatsApp tabs are owned by the extension.
+echo       This avoids multiple automation tabs trying to process the same conversation.
 
 echo [5/5] Running.
 echo.
@@ -126,6 +124,7 @@ echo The extension talks directly to Ollama. Python is not required for normal l
 echo LinkedIn comments, comment-thread replies, connection requests, incoming invitations,
 echo LinkedIn inbox replies, and WhatsApp replies are handled in the browser.
 echo.
+echo If an inbox is not open, use the extension Settings page and click Run Messages once.
 echo WhatsApp replies always disclose that the reply is automated and that Moshe will follow up.
 echo Business facts and writing style come from the extension Settings page.
 echo.
