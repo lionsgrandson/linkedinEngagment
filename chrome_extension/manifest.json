@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CodeCrafter Social Bridge",
-  "version": "3.20.14",
+  "version": "3.20.15",
   "description": "Configurable local engagement automation for LinkedIn, Instagram, Facebook, and WhatsApp Web.",
   "permissions": [
     "tabs",
@@ -18,7 +18,7 @@
     "http://127.0.0.1:11434/*"
   ],
   "background": {
-    "service_worker": "service_worker.js"
+    "service_worker": "service_worker_v2.js"
   },
   "action": {
     "default_title": "Open CodeCrafter Social settings"
