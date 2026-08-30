@@ -1,5 +1,7 @@
 ;(() => {
+  const SETTINGS_SCHEMA_VERSION = 4
   const DEFAULT_SETTINGS = {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
     ui: {
       showOverlay: true,
       compactOverlay: true,
@@ -40,7 +42,7 @@
         notificationReplies: true,
         notificationInterrupts: false,
         imageRecognition: true,
-        messages: false,
+        messages: true,
         scheduledPosts: true,
         postEveryDays: 3,
         postHour: 10,
@@ -82,10 +84,10 @@
         topics: [],
       },
       whatsapp: {
-        enabled: false,
-        messages: false,
-        optedIn: false,
-        consentRevision: 0,
+        enabled: true,
+        messages: true,
+        optedIn: true,
+        consentRevision: 2,
         topics: [],
       },
     },
@@ -94,6 +96,8 @@
   const clone = (value) => JSON.parse(JSON.stringify(value))
   const merge = (defaults, saved) => {
     const result = clone(defaults)
+    const previousSchema = Number(saved?.schemaVersion || 0)
+    result.schemaVersion = SETTINGS_SCHEMA_VERSION
     if (saved?.ui) {
       result.ui.showOverlay = saved.ui.showOverlay !== false
       result.ui.compactOverlay = saved.ui.compactOverlay !== false
@@ -170,12 +174,28 @@
         result.platforms[platform].consentRevision = Number.isFinite(revision) ? revision : 0
       }
     }
+
+    if (previousSchema < 4) {
+      result.platforms.linkedin.enabled = true
+      result.platforms.linkedin.comments = true
+      result.platforms.linkedin.connections = true
+      result.platforms.linkedin.incomingInvites = true
+      result.platforms.linkedin.notificationReplies = true
+      result.platforms.linkedin.messages = true
+      result.platforms.whatsapp.enabled = true
+      result.platforms.whatsapp.messages = true
+      result.platforms.whatsapp.optedIn = true
+      result.platforms.whatsapp.consentRevision = 2
+    }
     return result
   }
 
   async function load() {
     const stored = await chrome.storage.local.get('ccSettings')
-    return merge(DEFAULT_SETTINGS, stored.ccSettings)
+    const normalized = merge(DEFAULT_SETTINGS, stored.ccSettings)
+    if (Number(stored.ccSettings?.schemaVersion || 0) < SETTINGS_SCHEMA_VERSION)
+      await chrome.storage.local.set({ccSettings: normalized})
+    return normalized
   }
 
   async function save(settings) {
