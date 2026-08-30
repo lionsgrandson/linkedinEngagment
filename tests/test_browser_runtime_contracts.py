@@ -9,6 +9,7 @@ class BrowserRuntimeContracts(unittest.TestCase):
     def setUpClass(cls):
         cls.root = Path(__file__).resolve().parent.parent
         cls.native = (cls.root / 'chrome_extension' / 'native_backend.js').read_text(encoding='utf-8')
+        cls.inbox_backend = (cls.root / 'chrome_extension' / 'inbox_backend_v2.js').read_text(encoding='utf-8')
         cls.settings = (cls.root / 'chrome_extension' / 'settings.js').read_text(encoding='utf-8')
         cls.manifest = (cls.root / 'chrome_extension' / 'manifest.json').read_text(encoding='utf-8')
         cls.fast_feed = (cls.root / 'chrome_extension' / 'linkedin_feed_fast.js').read_text(encoding='utf-8')
@@ -37,6 +38,13 @@ class BrowserRuntimeContracts(unittest.TestCase):
         self.assertNotIn('remaining = 5000 + Math.random() * 5000', self.fast_feed)
         self.assertNotIn('remaining = 10000', self.fast_feed)
 
+    def test_fast_feed_locks_posts_before_comment_submit(self):
+        self.assertIn("const HANDLED_STORAGE_KEY = 'ccLinkedInHandledPosts'", self.fast_feed)
+        self.assertIn("await markHandled(action.key, 'submit_attempted')", self.fast_feed)
+        self.assertIn("'comment_unconfirmed_no_retry'", self.fast_feed)
+        self.assertIn('!persistentHandled.has(item.key)', self.fast_feed)
+        self.assertIn('window.scrollBy({top: 650', self.fast_feed)
+
     def test_linkedin_inbox_is_persistent_and_retries_transient_failures(self):
         self.assertIn('const SCAN_INTERVAL_MS = 2000', self.inbox)
         self.assertIn('Starting persistent inbox watcher', self.inbox)
@@ -52,6 +60,14 @@ class BrowserRuntimeContracts(unittest.TestCase):
         self.assertIn('You sent', self.inbox)
         self.assertIn('Moshe Schwartzberg sent the following message', self.inbox)
         self.assertIn('function latestIsInbound()', self.inbox)
+
+    def test_private_replies_do_not_depend_on_json_and_reject_ai_draft_wrappers(self):
+        self.assertIn('Do not return JSON.', self.inbox_backend)
+        self.assertIn('professional response draft', self.inbox_backend)
+        self.assertIn('email subject line', self.inbox_backend)
+        self.assertIn('reply was too long', self.inbox_backend)
+        self.assertIn('const maxChars = isLinkedIn ? 520 : 700', self.inbox_backend)
+        self.assertNotIn("parseJson(await ollama", self.inbox_backend)
 
     def test_notification_replies_are_not_discarded(self):
         self.assertIn("ccLinkedInRepliedNotifications", self.native)
@@ -90,7 +106,11 @@ class BrowserRuntimeContracts(unittest.TestCase):
         node = shutil.which('node')
         if not node:
             self.skipTest('Node.js is not available')
-        for relative in ['chrome_extension/linkedin_feed_fast.js', 'chrome_extension/inbox_content.js']:
+        for relative in [
+            'chrome_extension/linkedin_feed_fast.js',
+            'chrome_extension/inbox_content.js',
+            'chrome_extension/inbox_backend_v2.js',
+        ]:
             result = subprocess.run(
                 [node, '--check', str(self.root / relative)],
                 capture_output=True,
