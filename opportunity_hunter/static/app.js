@@ -67,6 +67,7 @@
           <div class="score">${Number(job.matchScore || 0)}%</div>
         </div>
         <p class="description">${escapeHtml(job.matchReason || job.description || '').slice(0, 1200)}</p>
+        ${job.resumeSuggestedQuery ? `<div class="contact-list"><span class="contact-chip">Resume target: ${escapeHtml(job.resumeSuggestedQuery)}</span></div>` : ''}
         ${job.gaps?.length ? `<div class="contact-list">${job.gaps.map((gap) => `<span class="contact-chip">Gap: ${escapeHtml(gap)}</span>`).join('')}</div>` : ''}
         <div class="result-actions">
           <button class="primary small" data-action="application">Prepare application</button>
@@ -186,9 +187,28 @@
         limit: 15,
       })
       state.jobs = payload.jobs || []
+      $('#resume-job-queries').textContent = ''
       renderJobs()
       notice(`Found ${state.jobs.length} jobs via ${payload.provider || 'search'}.`, 'success')
     } catch (error) { notice(`Job search failed: ${error.message}`, 'failure') }
+  })
+
+  $('#find-from-resume').addEventListener('click', async () => {
+    if (!state.resume?.characters) return notice('Upload or paste your resume first.', 'failure')
+    notice('Ollama is choosing realistic roles from your resume, then searching all of them…', 'loading')
+    try {
+      const payload = await api('/api/jobs/from-resume', {
+        location: $('#job-location').value.trim(),
+        country: $('#job-country').value.trim(),
+        limit: 25,
+      })
+      state.jobs = payload.jobs || []
+      $('#resume-job-queries').textContent = payload.queries?.length
+        ? `Ollama searched: ${payload.queries.join(' · ')}`
+        : ''
+      renderJobs()
+      notice(`Resume search found ${state.jobs.length} ranked jobs.`, 'success')
+    } catch (error) { notice(`Resume job search failed: ${error.message}`, 'failure') }
   })
 
   async function prepareApplication(id) {
