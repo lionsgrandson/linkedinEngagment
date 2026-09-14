@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from opportunity_hunter import engine
+from opportunity_hunter import engine, resume_jobs
 from opportunity_hunter.server import _edit_pending_approval
 
 
@@ -49,6 +49,23 @@ class OpportunityHunterTests(unittest.TestCase):
         self.assertEqual(ranked[0]["id"], "1")
         self.assertGreater(ranked[0]["matchScore"], ranked[1]["matchScore"])
         self.assertIn("Resume not loaded", ranked[0]["matchReason"])
+
+    def test_resume_job_mode_uses_ollama_titles_and_deduplicates_results(self):
+        engine.set_resume_text(
+            "resume.txt",
+            "Software developer experienced with Python, JavaScript, React, Node.js, SQL, APIs and customer-facing work.",
+        )
+        with patch.object(resume_jobs, "suggest_queries", return_value=["Python Developer", "Full Stack Developer"]), \
+                patch.object(resume_jobs, "_search_one", side_effect=[
+                    ([{"id": "one", "title": "Backend Developer", "company": "A", "url": "https://jobs.example/1", "description": "Python SQL"}], "brave", []),
+                    ([{"id": "duplicate", "title": "Backend Developer", "company": "A", "url": "https://jobs.example/1", "description": "Python SQL"},
+                      {"id": "two", "title": "Full Stack Developer", "company": "B", "url": "https://jobs.example/2", "description": "React Node JavaScript"}], "brave", []),
+                ]), \
+                patch.object(engine, "rank_jobs", side_effect=lambda jobs, _target: jobs):
+            result = resume_jobs.find_from_resume("Israel", country="IL", limit=10)
+        self.assertEqual(result["queries"], ["Python Developer", "Full Stack Developer"])
+        self.assertEqual(len(result["jobs"]), 2)
+        self.assertEqual({job["url"] for job in result["jobs"]}, {"https://jobs.example/1", "https://jobs.example/2"})
 
     def test_approval_can_be_edited_then_consumed_only_once(self):
         approval = engine.create_approval("whatsapp", {
