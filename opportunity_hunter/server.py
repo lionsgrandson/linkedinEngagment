@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from . import engine
+from . import engine, resume_jobs
 
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -120,6 +120,13 @@ class HunterHandler(BaseHTTPRequestHandler):
                     country=str(data.get("country", "")),
                     limit=int(data.get("limit", 15) or 15),
                     provider=str(data.get("provider", "auto")),
+                )
+                return self._json({"ok": True, **result})
+            if path == "/api/jobs/from-resume":
+                result = resume_jobs.find_from_resume(
+                    str(data.get("location", "")),
+                    country=str(data.get("country", "")),
+                    limit=int(data.get("limit", 25) or 25),
                 )
                 return self._json({"ok": True, **result})
             if path == "/api/jobs/application-pack":
