@@ -2,3 +2,5 @@ playwright==1.61.0
 requests==2.32.4
 python-dotenv==1.1.1
 google-analytics-data==0.23.0
+pypdf==6.1.0
+python-docx==1.2.0
