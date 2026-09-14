@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CodeCrafter Opportunity Hunter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">CodeCrafter Opportunity Hunter</p>
+        <h1>Jobs, clients, and approval-first outreach</h1>
+        <p class="lede">Search broadly, let local Ollama rank and research, then approve every application or outbound action yourself.</p>
+      </div>
+      <div id="health" class="health">Loading local services…</div>
+    </header>
+
+    <nav class="tabs" aria-label="Opportunity Hunter sections">
+      <button class="tab active" data-tab="resume">Resume</button>
+      <button class="tab" data-tab="jobs">Job Hunter</button>
+      <button class="tab" data-tab="clients">Client Hunter</button>
+      <button class="tab" data-tab="approvals">Approvals</button>
+      <button class="tab" data-tab="setup">Setup</button>
+    </nav>
+
+    <section id="notice" class="notice" data-phase="blank" aria-live="polite">Ready.</section>
+
+    <section class="panel active" data-panel="resume">
+      <div class="section-head">
+        <div><p class="eyebrow">Candidate profile</p><h2>Resume</h2></div>
+        <span id="resume-status" class="pill">No resume loaded</span>
+      </div>
+      <div class="grid two">
+        <article class="card">
+          <h3>Upload a resume</h3>
+          <p>PDF, DOCX, TXT, MD, JSON or CSV. The extracted text stays on this computer in <code>hunter_state.json</code>.</p>
+          <label class="file-drop" for="resume-file">
+            <strong>Choose resume</strong>
+            <span>Maximum 8 MB</span>
+          </label>
+          <input id="resume-file" type="file" accept=".pdf,.docx,.txt,.md,.json,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+        </article>
+        <article class="card">
+          <h3>Or paste it</h3>
+          <textarea id="resume-text" rows="12" placeholder="Paste your resume or professional profile here"></textarea>
+          <div class="row end"><button id="save-resume-text" class="primary">Save pasted resume</button></div>
+        </article>
+      </div>
+      <article class="card preview-card">
+        <h3>Loaded profile preview</h3>
+        <pre id="resume-preview">Nothing loaded yet.</pre>
+      </article>
+    </section>
+
+    <section class="panel" data-panel="jobs">
+      <div class="section-head">
+        <div><p class="eyebrow">Candidate mode</p><h2>Find jobs</h2></div>
+        <span class="pill warning">Review before applying</span>
+      </div>
+      <div class="filters card">
+        <label>Job type<input id="job-query" placeholder="Software developer, IT support, frontend engineer"></label>
+        <label>Location<input id="job-location" placeholder="Israel, Tel Aviv, remote"></label>
+        <label>Country code<input id="job-country" maxlength="2" placeholder="IL"></label>
+        <label>Search source<select id="job-provider"><option value="auto">Auto</option><option value="brave">Brave Search</option><option value="adzuna">Adzuna</option></select></label>
+        <button id="search-jobs" class="primary">Search and rank jobs</button>
+      </div>
+      <p class="policy-callout">This module does not mass-submit LinkedIn Easy Apply. It ranks jobs, prepares application material, and opens the real application page for your review.</p>
+      <div id="job-results" class="results"></div>
+    </section>
+
+    <section class="panel" data-panel="clients">
+      <div class="section-head">
+        <div><p class="eyebrow">Business development mode</p><h2>Find clients</h2></div>
+        <span class="pill">Public web research</span>
+      </div>
+      <div class="filters card">
+        <label>Type of client / service<input id="client-type" placeholder="Law firms needing a website, accountants, restaurants"></label>
+        <label>Location<input id="client-location" placeholder="Haifa, Israel"></label>
+        <label>Country code<input id="client-country" maxlength="2" placeholder="IL"></label>
+        <label class="wide">Your business facts<textarea id="sender-context" rows="4" placeholder="Paste truthful CodeCrafter facts, services, pricing constraints, proof, and preferred tone. These facts may be used in outreach."></textarea></label>
+        <button id="search-clients" class="primary">Find potential clients</button>
+      </div>
+      <div id="client-results" class="results"></div>
+    </section>
+
+    <section class="panel" data-panel="approvals">
+      <div class="section-head">
+        <div><p class="eyebrow">Human control</p><h2>Pending approvals</h2></div>
+        <button id="refresh-approvals" class="secondary">Refresh</button>
+      </div>
+      <div id="approval-results" class="results"></div>
+    </section>
+
+    <section class="panel" data-panel="setup">
+      <div class="section-head"><div><p class="eyebrow">Local configuration</p><h2>Integrations</h2></div></div>
+      <div id="integration-grid" class="grid two"></div>
+      <article class="card setup-card">
+        <h3>Recommended <code>.env</code> variables</h3>
+        <pre>OLLAMA_MODEL=qwen3.5:9b
+BRAVE_SEARCH_API_KEY=...
+
+# Optional structured jobs source
+ADZUNA_APP_ID=...
+ADZUNA_APP_KEY=...
+ADZUNA_COUNTRY=gb
+
+# Optional approved email sending
+OUTREACH_SMTP_HOST=smtp.example.com
+OUTREACH_SMTP_PORT=587
+OUTREACH_SMTP_USER=...
+OUTREACH_SMTP_PASSWORD=...
+OUTREACH_SMTP_FROM=you@example.com
+
+# Optional approved TTS calling
+TWILIO_ACCOUNT_SID=...
+TWILIO_AUTH_TOKEN=...
+TWILIO_FROM_NUMBER=+1...
+TWILIO_TTS_LANGUAGE=en-US</pre>
+        <p>Secrets are read by the local Python process. Do not put API keys in the browser code or commit your <code>.env</code>.</p>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="draft-dialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><div><p class="eyebrow">Review required</p><h2 id="draft-title">Draft</h2></div><button value="cancel" class="icon-button" aria-label="Close">×</button></div>
+      <div id="draft-body"></div>
+      <div id="draft-actions" class="row end"></div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
