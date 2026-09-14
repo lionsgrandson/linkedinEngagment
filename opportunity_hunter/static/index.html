@@ -66,6 +66,10 @@
         <label>Search source<select id="job-provider"><option value="auto">Auto</option><option value="brave">Brave Search</option><option value="adzuna">Adzuna</option></select></label>
         <button id="search-jobs" class="primary">Search and rank jobs</button>
       </div>
+      <div class="row" style="margin:12px 0">
+        <button id="find-from-resume" class="secondary">Let Ollama choose roles from my resume and find work</button>
+        <span id="resume-job-queries" class="meta"></span>
+      </div>
       <p class="policy-callout">This module does not mass-submit LinkedIn Easy Apply. It ranks jobs, prepares application material, and opens the real application page for your review.</p>
       <div id="job-results" class="results"></div>
     </section>
