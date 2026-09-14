@@ -15,6 +15,26 @@ STATIC = Path(__file__).resolve().parent / "static"
 MAX_BODY = 10_000_000
 
 
+def _edit_pending_approval(approval_id: str, expected_kind: str, updates: dict[str, str]) -> None:
+    """Apply the user's final edits immediately before the approved action runs."""
+    state = engine.load_state()
+    for item in state.get("approvals", []):
+        if item.get("id") != approval_id:
+            continue
+        if item.get("kind") != expected_kind:
+            raise ValueError("Approval does not match this action")
+        if item.get("consumedAt"):
+            raise ValueError("Approval was already used")
+        payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+        for key, value in updates.items():
+            if value is not None:
+                payload[key] = value
+        item["payload"] = payload
+        engine.save_state(state)
+        return
+    raise ValueError("Approval was not found")
+
+
 class HunterHandler(BaseHTTPRequestHandler):
     server_version = "CodeCrafterOpportunityHunter/1.0"
 
@@ -127,10 +147,13 @@ class HunterHandler(BaseHTTPRequestHandler):
                 )
                 return self._json({"ok": True, "draft": result})
             if path == "/api/outreach/email/send":
-                result = engine.send_approved_email(
-                    str(data.get("approvalId", "")),
-                    to_override=str(data.get("to", "")),
-                )
+                approval_id = str(data.get("approvalId", ""))
+                _edit_pending_approval(approval_id, "email", {
+                    "to": str(data.get("to", "")).strip(),
+                    "subject": str(data.get("subject", ""))[:300],
+                    "body": str(data.get("body", ""))[:12000],
+                })
+                result = engine.send_approved_email(approval_id)
                 return self._json({"ok": True, **result})
             if path == "/api/outreach/whatsapp/draft":
                 client = data.get("client") if isinstance(data.get("client"), dict) else {}
@@ -141,10 +164,12 @@ class HunterHandler(BaseHTTPRequestHandler):
                 )
                 return self._json({"ok": True, "draft": result})
             if path == "/api/outreach/whatsapp/open":
-                result = engine.approved_whatsapp_link(
-                    str(data.get("approvalId", "")),
-                    phone_override=str(data.get("phone", "")),
-                )
+                approval_id = str(data.get("approvalId", ""))
+                _edit_pending_approval(approval_id, "whatsapp", {
+                    "phone": str(data.get("phone", "")).strip(),
+                    "message": str(data.get("message", ""))[:4000],
+                })
+                result = engine.approved_whatsapp_link(approval_id)
                 return self._json({"ok": True, **result})
             if path == "/api/outreach/call/draft":
                 client = data.get("client") if isinstance(data.get("client"), dict) else {}
@@ -155,10 +180,12 @@ class HunterHandler(BaseHTTPRequestHandler):
                 )
                 return self._json({"ok": True, "draft": result})
             if path == "/api/outreach/call/start":
-                result = engine.start_approved_call(
-                    str(data.get("approvalId", "")),
-                    phone_override=str(data.get("phone", "")),
-                )
+                approval_id = str(data.get("approvalId", ""))
+                _edit_pending_approval(approval_id, "call", {
+                    "phone": str(data.get("phone", "")).strip(),
+                    "script": str(data.get("script", ""))[:3000],
+                })
+                result = engine.start_approved_call(approval_id)
                 return self._json({"ok": True, **result})
             return self._error("not found", 404)
         except PermissionError as exc:
