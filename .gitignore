@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 linkedin_bot.log
 state.json
+hunter_state.json
 STOP
 .env
 .codex-change-log.txt
