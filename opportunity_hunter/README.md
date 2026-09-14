@@ -5,6 +5,7 @@ A separate local module for finding jobs and potential clients without mixing ex
 ## What it does
 
 - Accepts a PDF, DOCX, TXT, MD, JSON, CSV, or pasted resume.
+- Has two job modes: search a job type you choose, or let Ollama derive realistic target roles directly from the resume and search all of them.
 - Searches for jobs through Adzuna when configured, otherwise through Brave Search.
 - Uses local Ollama to rank jobs against the actual resume and identify gaps.
 - Generates a truthful application pack (fit summary, cover letter, likely questions, warnings).
