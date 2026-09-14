@@ -12,7 +12,7 @@ echo [Opportunity Hunter] Installing/updating dependencies...
 ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt
 if errorlevel 1 goto :fail
 
-start "CodeCrafter Opportunity Hunter" cmd /c "timeout /t 2 /nobreak >nul & start \"\" http://127.0.0.1:8770"
+start "" powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:8770'"
 echo [Opportunity Hunter] Starting at http://127.0.0.1:8770
 ".venv\Scripts\python.exe" -m opportunity_hunter.server
 exit /b %errorlevel%
