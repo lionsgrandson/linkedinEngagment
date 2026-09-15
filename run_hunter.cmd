@@ -2,23 +2,22 @@
 setlocal
 cd /d "%~dp0"
 
-if not exist ".venv\Scripts\python.exe" (
-  echo [Opportunity Hunter] Creating Python environment...
-  py -3.11 -m venv .venv 2>nul || python -m venv .venv
-  if errorlevel 1 goto :fail
+where npm >nul 2>&1
+if errorlevel 1 (
+  echo [Opportunity Hunter] Node.js/npm is not installed.
+  echo Install Node.js 18 or newer once, then run this file again.
+  echo https://nodejs.org/
+  pause
+  exit /b 1
 )
 
-echo [Opportunity Hunter] Installing/updating dependencies...
-".venv\Scripts\python.exe" -m pip install -q -r requirements.txt
-if errorlevel 1 goto :fail
+call npm run start
+set "EXIT_CODE=%errorlevel%"
 
-start "" powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:8770'"
-echo [Opportunity Hunter] Starting at http://127.0.0.1:8770
-".venv\Scripts\python.exe" -m opportunity_hunter.server
-exit /b %errorlevel%
+if not "%EXIT_CODE%"=="0" (
+  echo.
+  echo Opportunity Hunter could not start. Review the error above.
+  pause
+)
 
-:fail
-echo.
-echo Opportunity Hunter could not start. Review the error above.
-pause
-exit /b 1
+exit /b %EXIT_CODE%
