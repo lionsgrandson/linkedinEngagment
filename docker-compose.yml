@@ -1,0 +1,15 @@
+services:
+  searxng:
+    image: ghcr.io/searxng/searxng:latest
+    container_name: opportunity-hunter-searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./searxng:/etc/searxng:rw
+      - searxng-cache:/var/cache/searxng
+    environment:
+      SEARXNG_BASE_URL: http://127.0.0.1:8888/
+
+volumes:
+  searxng-cache:
