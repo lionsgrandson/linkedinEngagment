@@ -63,7 +63,7 @@
         <label>Job type<input id="job-query" placeholder="Software developer, IT support, frontend engineer"></label>
         <label>Location<input id="job-location" placeholder="Israel, Tel Aviv, remote"></label>
         <label>Country code<input id="job-country" maxlength="2" placeholder="IL"></label>
-        <label>Search source<select id="job-provider"><option value="auto">Auto</option><option value="brave">Brave Search</option><option value="adzuna">Adzuna</option></select></label>
+        <label>Search source<select id="job-provider"><option value="auto">Auto (recommended)</option><option value="tavily">Tavily</option><option value="searxng">Local SearXNG</option><option value="adzuna">Adzuna</option><option value="brave">Brave Search (optional)</option></select></label>
         <button id="search-jobs" class="primary">Search and rank jobs</button>
       </div>
       <div class="row" style="margin:12px 0">
@@ -103,7 +103,17 @@
       <article class="card setup-card">
         <h3>Recommended <code>.env</code> variables</h3>
         <pre>OLLAMA_MODEL=qwen3.5:9b
-BRAVE_SEARCH_API_KEY=...
+
+# Recommended web search: free tier, no card required
+TAVILY_API_KEY=...
+HUNTER_SEARCH_PROVIDER=tavily
+
+# No-account alternative: self-host SearXNG locally
+# SEARXNG_URL=http://127.0.0.1:8888
+# HUNTER_SEARCH_PROVIDER=searxng
+
+# Optional legacy fallback
+# BRAVE_SEARCH_API_KEY=...
 
 # Optional structured jobs source
 ADZUNA_APP_ID=...
@@ -136,5 +146,6 @@ TWILIO_TTS_LANGUAGE=en-US</pre>
   </dialog>
 
   <script src="app.js"></script>
+  <script src="provider_ui.js"></script>
 </body>
 </html>
