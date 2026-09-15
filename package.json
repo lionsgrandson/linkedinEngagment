@@ -1,0 +1,14 @@
+{
+  "name": "linkedin-engagement-opportunity-hunter",
+  "version": "3.18.1",
+  "private": true,
+  "description": "One-command local launcher for Opportunity Hunter, SearXNG and Ollama.",
+  "scripts": {
+    "start": "node scripts/start.js",
+    "hunter": "node scripts/start.js",
+    "stop": "node scripts/stop.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
