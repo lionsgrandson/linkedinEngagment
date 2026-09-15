@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -29,7 +30,7 @@ class LauncherConfigTests(unittest.TestCase):
     def test_launcher_bootstraps_local_dependencies(self) -> None:
         launcher = (ROOT / "scripts" / "start.js").read_text(encoding="utf-8")
         for expected in (
-            "docker compose",
+            "docker-compose.yml",
             "HUNTER_SEARCH_PROVIDER=searxng",
             "SEARXNG_URL",
             "OLLAMA_MODEL=qwen3.5:9b",
@@ -38,6 +39,18 @@ class LauncherConfigTests(unittest.TestCase):
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, launcher)
+
+    def test_node_launchers_parse(self) -> None:
+        for script in (ROOT / "scripts" / "start.js", ROOT / "scripts" / "stop.js"):
+            with self.subTest(script=script.name):
+                result = subprocess.run(
+                    ["node", "--check", str(script)],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
